@@ -27,6 +27,8 @@ Production files are generated in `dist/`.
 ## Project structure
 
 - `src/main.tsx` — application entry point.
-- `src/App.tsx` — main React component and Three.js scene.
+- `src/App.tsx` — application layout.
+- `src/components/SceneViewer.tsx` — connects the viewer lifecycle to React.
+- `src/viewer/Viewer.ts` — Three.js scene, camera, rendering, resizing, and cleanup.
 - `src/style.css` — global styles and Tailwind configuration.
 - `vite.config.ts` — Vite configuration.
