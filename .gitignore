@@ -7,3 +7,6 @@ dist/
 !.env.example
 
 AGENTS.md
+
+/src/data/*.local.ts
+/data/private/

@@ -1,16 +1,21 @@
 import { useEffect, useRef } from 'react'
 import { Viewer } from '../viewer/Viewer'
+import type { Block } from '../data/Block'
 
-export default function SceneViewer() {
+interface SceneViewerProps {
+  blocks: readonly Block[]
+}
+
+export default function SceneViewer({ blocks }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
-    const viewer = new Viewer(container)
+    const viewer = new Viewer(container, blocks)
     return () => viewer.dispose()
-  }, [])
+  }, [blocks])
 
   return (
     <div
