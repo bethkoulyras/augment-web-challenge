@@ -7,14 +7,18 @@ import {
   MeshNormalMaterial,
   PerspectiveCamera,
   Scene,
+  Sphere,
   Vector3,
   WebGLRenderer,
 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import type { Block } from '../data/Block'
+import type { BlockModel, ModelView } from '../data/BlockModel'
 
 export class Viewer {
   private readonly container: HTMLElement
+  private readonly model: BlockModel
+  private readonly origin = new Vector3()
   private readonly scene = new Scene()
   private readonly camera = new PerspectiveCamera(45, 1, 0.1, 100)
   private readonly modelBounds = new Box3()
@@ -24,20 +28,33 @@ export class Viewer {
   private readonly controls: OrbitControls
   private readonly resizeObserver: ResizeObserver
   private blockMesh: InstancedMesh<BoxGeometry, MeshNormalMaterial> | null = null
+  private view: ModelView = 'before'
   private disposed = false
 
-  constructor(container: HTMLElement, blocks: readonly Block[]) {
+  constructor(container: HTMLElement, model: BlockModel) {
     this.container = container
+    this.model = model
+    const first = model.before[0]
+    if (first) this.origin.set(first.XC, first.YC, first.ZC)
     this.renderer = new WebGLRenderer({ antialias: true, alpha: true })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.container.appendChild(this.renderer.domElement)
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.addEventListener('change', this.render)
-    this.createBlocks(blocks)
+    this.createBlocks()
     this.resizeObserver = new ResizeObserver(this.resize)
     this.resizeObserver.observe(this.container)
     this.resize()
+    this.resetCamera()
+    this.render()
+  }
+
+  public setView(view: ModelView): void {
+    if (view === this.view) return
+    this.view = view
+    this.updateBlocks(this.model[view])
+    this.render()
   }
 
   public resetCamera(): void {
@@ -73,26 +90,43 @@ export class Viewer {
     this.renderer.domElement.remove()
   }
 
-  private createBlocks(blocks: readonly Block[]): void {
-    const origin = blocks[0]
-    if (!origin) return
+  private createBlocks(): void {
+    const mesh = new InstancedMesh(this.geometry, this.material, this.model.before.length)
+    const position = new Vector3()
+    const halfSize = new Vector3()
+    for (const blocks of [this.model.before, this.model.after]) {
+      for (const block of blocks) {
+        this.positionFor(block, position)
+        halfSize.set(block.Xinc / 2, block.Zinc / 2, block.Yinc / 2)
+        this.modelBounds.expandByPoint(position.sub(halfSize))
+        this.modelBounds.expandByPoint(position.addScaledVector(halfSize, 2))
+      }
+    }
+    mesh.boundingBox = this.modelBounds.clone()
+    mesh.boundingSphere = this.modelBounds.getBoundingSphere(new Sphere())
+    this.blockMesh = mesh
+    this.updateBlocks(this.model.before)
+    this.scene.add(mesh)
+  }
 
-    const mesh = new InstancedMesh(this.geometry, this.material, blocks.length)
+  private updateBlocks(blocks: readonly Block[]): void {
+    const mesh = this.blockMesh
+    if (!mesh) return
     const matrix = new Matrix4()
-
+    const position = new Vector3()
+    mesh.count = blocks.length
     blocks.forEach((block, index) => {
-      // Mining coordinates use Z-up; map (X, Y, Z) to Three.js (X, Z, -Y).
       matrix.makeScale(block.Xinc, block.Zinc, block.Yinc)
-      matrix.setPosition(block.XC - origin.XC, block.ZC - origin.ZC, -(block.YC - origin.YC))
+      matrix.setPosition(this.positionFor(block, position))
       mesh.setMatrixAt(index, matrix)
     })
 
     mesh.instanceMatrix.needsUpdate = true
-    mesh.computeBoundingBox()
-    mesh.computeBoundingSphere()
-    if (mesh.boundingBox) this.modelBounds.copy(mesh.boundingBox)
-    this.blockMesh = mesh
-    this.scene.add(mesh)
+  }
+
+  private positionFor(block: Block, target: Vector3): Vector3 {
+    // Mining coordinates use Z-up; map (X, Y, Z) to Three.js (X, Z, -Y).
+    return target.set(block.XC - this.origin.x, block.ZC - this.origin.z, -(block.YC - this.origin.y))
   }
 
   private readonly resize = (): void => {
@@ -102,8 +136,8 @@ export class Viewer {
     if (width === 0 || height === 0) return
 
     this.camera.aspect = width / height
+    this.camera.updateProjectionMatrix()
     this.renderer.setSize(width, height)
-    this.resetCamera()
     this.render()
   }
 
