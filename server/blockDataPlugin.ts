@@ -3,6 +3,7 @@ import { promisify } from 'node:util'
 import { gzip, gunzip } from 'node:zlib'
 import type { Plugin, PreviewServer, ViteDevServer } from 'vite'
 import { readBlockModelFromCsv } from './readBlockModelFromCsv.ts'
+import { serveSceneLayers } from './serveSceneLayers.ts'
 
 const compress = promisify(gzip)
 const decompress = promisify(gunzip)
@@ -11,6 +12,7 @@ export function blockDataPlugin(dataDirectory: string): Plugin {
   let cachedResponse: Promise<Buffer> | undefined
 
   const serveBlockData = (server: ViteDevServer | PreviewServer): void => {
+    serveSceneLayers(server, dataDirectory)
     server.middlewares.use('/api/block-model', async (request, response) => {
       response.setHeader('Content-Type', 'application/json')
       response.setHeader('Cache-Control', 'no-store')

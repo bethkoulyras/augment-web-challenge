@@ -61,3 +61,13 @@ Production files are generated in `dist/`.
 - `server/blockDataPlugin.ts` — local data endpoint and response cache.
 - `src/style.css` — global styles and Tailwind configuration.
 - `vite.config.ts` — Vite configuration.
+
+## Survey and blast layers
+
+The viewer also reads `1_pre_surface.csv`, `1_pst_surface.csv`, `1_pre_string.csv`, `1_pst_string.csv` and `1_blastholes.csv` from `data/private/`. These remain excluded from version control and the production bundle.
+
+Layer controls switch blocks, surveyed surfaces, boundary footprints and blastholes independently. Each tab shows its corresponding complete survey and boundary. Surfaces are measured geometry, while the post-blast block positions are OMP predictions. Both are shown at their supplied coordinates; boundary outlines retain their recorded elevations.
+
+All survey triangles are streamed and validated, then transferred as compressed Float32 binary coordinates through `/api/surface-before` and `/api/surface-after`. `/api/scene-layers` supplies boundary points and hole attributes. Restart the server after replacing data files.
+
+Amber collar points and lines show the pre-blast holes. Hole endpoints use the supplied depth, inclination from horizontal, and bearing clockwise from north. They are visualised as centre lines, not scaled bore diameters. Drill data remains associated with the pre-blast scene.

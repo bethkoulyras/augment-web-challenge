@@ -1,16 +1,23 @@
 import {
+  AmbientLight,
+  DirectionalLight,
   Box3,
   BoxGeometry,
   InstancedMesh,
   MathUtils,
   Matrix4,
   MeshNormalMaterial,
+  MeshBasicMaterial,
   PerspectiveCamera,
   Scene,
   Sphere,
   Vector3,
   WebGLRenderer,
 } from 'three'
+import { classifyBlocks } from '../data/classifyBlocks'
+import type { BlockGroups } from '../data/classifyBlocks'
+import { SurveyLayers } from './SurveyLayers'
+import type { LayerVisibility } from '../data/SceneLayers'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import type { Block } from '../data/Block'
 import type { BlockModel, ModelView } from '../data/BlockModel'
@@ -18,22 +25,28 @@ import type { BlockModel, ModelView } from '../data/BlockModel'
 export class Viewer {
   private readonly container: HTMLElement
   private readonly model: BlockModel
+  private readonly groups: BlockGroups
   private readonly origin = new Vector3()
   private readonly scene = new Scene()
   private readonly camera = new PerspectiveCamera(45, 1, 0.1, 100)
   private readonly modelBounds = new Box3()
   private readonly geometry = new BoxGeometry(1, 1, 1)
   private readonly material = new MeshNormalMaterial()
+  private readonly contextMaterial = new MeshBasicMaterial({ color: 0x7b8490, transparent: true, opacity: 0.12, depthWrite: false })
+  private contextMesh: InstancedMesh<BoxGeometry, MeshBasicMaterial> | null = null
   private readonly renderer: WebGLRenderer
   private readonly controls: OrbitControls
   private readonly resizeObserver: ResizeObserver
   private blockMesh: InstancedMesh<BoxGeometry, MeshNormalMaterial> | null = null
   private view: ModelView = 'before'
+  private readonly surveyLayers: SurveyLayers
+  private visibility: LayerVisibility = { blocks: true, context: false, surface: true, boundary: true, holes: true }
   private disposed = false
 
   constructor(container: HTMLElement, model: BlockModel) {
     this.container = container
     this.model = model
+    this.groups = classifyBlocks(model.after)
     const first = model.before[0]
     if (first) this.origin.set(first.XC, first.YC, first.ZC)
     this.renderer = new WebGLRenderer({ antialias: true, alpha: true })
@@ -43,6 +56,11 @@ export class Viewer {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.addEventListener('change', this.render)
     this.createBlocks()
+    this.surveyLayers = new SurveyLayers(model.layers, this.origin)
+    this.surveyLayers.update(this.view, this.visibility)
+    const light = new DirectionalLight(0xffffff, 1.8)
+    light.position.set(1, 3, 2)
+    this.scene.add(this.surveyLayers.group, new AmbientLight(0xffffff, 0.8), light)
     this.resizeObserver = new ResizeObserver(this.resize)
     this.resizeObserver.observe(this.container)
     this.resize()
@@ -54,6 +72,15 @@ export class Viewer {
     if (view === this.view) return
     this.view = view
     this.updateBlocks(this.model[view])
+    this.surveyLayers.update(view, this.visibility)
+    this.render()
+  }
+
+  public setLayerVisibility(visibility: LayerVisibility): void {
+    this.visibility = visibility
+    if (this.blockMesh) this.blockMesh.visible = visibility.blocks
+    if (this.contextMesh) this.contextMesh.visible = visibility.context
+    this.surveyLayers.update(this.view, visibility)
     this.render()
   }
 
@@ -67,7 +94,7 @@ export class Viewer {
 
     this.camera.position.copy(centre).addScaledVector(direction, distance)
     this.camera.near = Math.max(radius / 1000, 0.01)
-    this.camera.far = distance * 10 + radius
+    this.camera.far = Math.max(distance * 10 + radius, this.surveyLayers.bounds.getSize(new Vector3()).length() * 4)
     this.camera.updateProjectionMatrix()
     this.controls.target.copy(centre)
     this.controls.minDistance = radius * 0.01
@@ -83,6 +110,9 @@ export class Viewer {
     this.controls.removeEventListener('change', this.render)
     this.controls.dispose()
     this.blockMesh?.dispose()
+    this.contextMesh?.dispose()
+    this.contextMaterial.dispose()
+    this.surveyLayers.dispose()
     this.geometry.dispose()
     this.material.dispose()
     this.scene.clear()
@@ -91,7 +121,9 @@ export class Viewer {
   }
 
   private createBlocks(): void {
-    const mesh = new InstancedMesh(this.geometry, this.material, this.model.before.length)
+    const mesh = new InstancedMesh(this.geometry, this.material, this.groups.material.length)
+    const context = new InstancedMesh(this.geometry, this.contextMaterial, this.groups.context.length)
+    context.visible = this.visibility.context
     const position = new Vector3()
     const halfSize = new Vector3()
     for (const blocks of [this.model.before, this.model.after]) {
@@ -105,23 +137,28 @@ export class Viewer {
     mesh.boundingBox = this.modelBounds.clone()
     mesh.boundingSphere = this.modelBounds.getBoundingSphere(new Sphere())
     this.blockMesh = mesh
+    context.boundingBox = this.modelBounds.clone()
+    context.boundingSphere = this.modelBounds.getBoundingSphere(new Sphere())
+    this.contextMesh = context
     this.updateBlocks(this.model.before)
-    this.scene.add(mesh)
+    this.scene.add(mesh, context)
   }
 
   private updateBlocks(blocks: readonly Block[]): void {
-    const mesh = this.blockMesh
-    if (!mesh) return
     const matrix = new Matrix4()
     const position = new Vector3()
-    mesh.count = blocks.length
-    blocks.forEach((block, index) => {
-      matrix.makeScale(block.Xinc, block.Zinc, block.Yinc)
-      matrix.setPosition(this.positionFor(block, position))
-      mesh.setMatrixAt(index, matrix)
-    })
-
-    mesh.instanceMatrix.needsUpdate = true
+    const updateMesh = (mesh: InstancedMesh | null, indices: readonly number[]): void => {
+      if (!mesh) return
+      indices.forEach((sourceIndex, instance) => {
+        const block = blocks[sourceIndex]
+        matrix.makeScale(block.Xinc, block.Zinc, block.Yinc)
+        matrix.setPosition(this.positionFor(block, position))
+        mesh.setMatrixAt(instance, matrix)
+      })
+      mesh.instanceMatrix.needsUpdate = true
+    }
+    updateMesh(this.blockMesh, this.groups.material)
+    updateMesh(this.contextMesh, this.groups.context)
   }
 
   private positionFor(block: Block, target: Vector3): Vector3 {

@@ -1,13 +1,15 @@
 import { useEffect, useRef } from 'react'
 import { Viewer } from '../viewer/Viewer'
+import type { LayerVisibility } from '../data/SceneLayers'
 import type { BlockModel, ModelView } from '../data/BlockModel'
 
 interface SceneViewerProps {
   model: BlockModel
   view: ModelView
+  visibility: LayerVisibility
 }
 
-export default function SceneViewer({ model, view }: SceneViewerProps) {
+export default function SceneViewer({ model, view, visibility }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
 
@@ -24,6 +26,8 @@ export default function SceneViewer({ model, view }: SceneViewerProps) {
   }, [model])
 
   useEffect(() => viewerRef.current?.setView(view), [model, view])
+
+  useEffect(() => viewerRef.current?.setLayerVisibility(visibility), [model, visibility])
 
   return (
     <div
