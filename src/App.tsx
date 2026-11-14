@@ -1,6 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import SceneViewer from './components/SceneViewer'
+import ColourControls from './components/ColourControls'
+import type { AttributeField } from './data/Block'
+import { createColourScale } from './data/blockColours'
 import type { ModelView } from './data/BlockModel'
 import type { LayerVisibility } from './data/SceneLayers'
 import { classifyBlocks } from './data/classifyBlocks'
@@ -14,9 +17,11 @@ const views = [
 export default function App() {
   const { model, error, isLoading } = useBlockModel()
   const [view, setView] = useState<ModelView>('before')
+  const [colourField, setColourField] = useState<AttributeField>('grade_01')
   const [visibility, setVisibility] = useState<LayerVisibility>({ blocks: true, context: false, surface: true, boundary: true, holes: true })
   const tabRefs = useRef<Record<ModelView, HTMLButtonElement | null>>({ before: null, after: null })
   const groups = useMemo(() => model ? classifyBlocks(model.after) : null, [model])
+  const colourScale = useMemo(() => model && groups ? createColourScale(model, groups.material, colourField) : null, [model, groups, colourField])
   const activeView = views.find((item) => item.key === view) ?? views[0]
 
   const handleTabKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
@@ -37,7 +42,7 @@ export default function App() {
     <main className="relative h-full w-full">
       {error && <p role="alert" className="p-4 text-red-300">{error}</p>}
       {isLoading && <p role="status" className="p-4 text-neutral-300">Loading block models, survey surfaces and blast data…</p>}
-      {model && (
+      {model && colourScale && (
         <>
           <div className="absolute top-4 left-4 z-10 rounded-lg border border-neutral-700 bg-neutral-900/90 p-2">
             <div role="tablist" aria-label="Block model view" onKeyDown={handleTabKeyDown} className="flex gap-1">
@@ -62,7 +67,7 @@ export default function App() {
               {activeView.title} · {groups?.material.length.toLocaleString()} material blocks
             </p>
           </div>
-          <fieldset className="absolute top-32 right-4 z-10 max-h-[calc(100%_-_9rem)] space-y-2 overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900/95 p-4 text-xs text-neutral-300">
+          <fieldset className="absolute top-32 right-4 z-10 max-h-[calc(100%_-_9rem)] w-64 max-w-[calc(100%_-_2rem)] space-y-2 overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900/95 p-4 text-xs text-neutral-300">
             <legend className="sr-only">Visible data layers</legend>
             <details open>
               <summary className="cursor-pointer font-medium">Data layers</summary>
@@ -81,6 +86,7 @@ export default function App() {
             ))}
               </div>
             </details>
+            <ColourControls field={colourField} scale={colourScale} onChange={setColourField} />
             <details className="border-t border-neutral-700 pt-3">
               <summary className="cursor-pointer text-neutral-400">Dataset details</summary>
             <p className="max-w-52 pt-2 leading-relaxed text-neutral-400">
@@ -93,7 +99,7 @@ export default function App() {
             </details>
           </fieldset>
           <section id="block-model-panel" role="tabpanel" aria-labelledby={'model-tab-' + view} tabIndex={0} className="h-full w-full">
-            <SceneViewer model={model} view={view} visibility={visibility} />
+            <SceneViewer model={model} view={view} visibility={visibility} colourScale={colourScale} />
           </section>
         </>
       )}

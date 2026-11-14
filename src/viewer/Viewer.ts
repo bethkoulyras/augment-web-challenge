@@ -6,7 +6,8 @@ import {
   InstancedMesh,
   MathUtils,
   Matrix4,
-  MeshNormalMaterial,
+  MeshLambertMaterial,
+  Color,
   MeshBasicMaterial,
   PerspectiveCamera,
   Scene,
@@ -15,6 +16,8 @@ import {
   WebGLRenderer,
 } from 'three'
 import { classifyBlocks } from '../data/classifyBlocks'
+import { colourForValue } from '../data/blockColours'
+import type { ColourScale } from '../data/blockColours'
 import type { BlockGroups } from '../data/classifyBlocks'
 import { SurveyLayers } from './SurveyLayers'
 import type { LayerVisibility } from '../data/SceneLayers'
@@ -31,13 +34,13 @@ export class Viewer {
   private readonly camera = new PerspectiveCamera(45, 1, 0.1, 100)
   private readonly modelBounds = new Box3()
   private readonly geometry = new BoxGeometry(1, 1, 1)
-  private readonly material = new MeshNormalMaterial()
+  private readonly material = new MeshLambertMaterial({ color: 0xffffff })
   private readonly contextMaterial = new MeshBasicMaterial({ color: 0x7b8490, transparent: true, opacity: 0.12, depthWrite: false })
   private contextMesh: InstancedMesh<BoxGeometry, MeshBasicMaterial> | null = null
   private readonly renderer: WebGLRenderer
   private readonly controls: OrbitControls
   private readonly resizeObserver: ResizeObserver
-  private blockMesh: InstancedMesh<BoxGeometry, MeshNormalMaterial> | null = null
+  private blockMesh: InstancedMesh<BoxGeometry, MeshLambertMaterial> | null = null
   private view: ModelView = 'before'
   private readonly surveyLayers: SurveyLayers
   private visibility: LayerVisibility = { blocks: true, context: false, surface: true, boundary: true, holes: true }
@@ -81,6 +84,20 @@ export class Viewer {
     if (this.blockMesh) this.blockMesh.visible = visibility.blocks
     if (this.contextMesh) this.contextMesh.visible = visibility.context
     this.surveyLayers.update(this.view, visibility)
+    this.render()
+  }
+
+  public setColourScale(scale: ColourScale): void {
+    const mesh = this.blockMesh
+    if (!mesh) return
+    const firstUpdate = mesh.instanceColor === null
+    const colour = new Color()
+    this.groups.material.forEach((sourceIndex, instance) => {
+      colour.setHex(colourForValue(scale, this.model.before[sourceIndex].attributes[scale.field]))
+      mesh.setColorAt(instance, colour)
+    })
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    if (firstUpdate) this.material.needsUpdate = true
     this.render()
   }
 

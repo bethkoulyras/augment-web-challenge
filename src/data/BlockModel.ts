@@ -1,4 +1,4 @@
-import type { Block } from './Block'
+import type { Block, SourceBlock } from './Block'
 import type { SceneLayers } from './SceneLayers'
 
 export type ModelView = 'before' | 'after'
@@ -12,6 +12,6 @@ export interface PredictedBlock extends Block {
 
 export interface BlockModel {
   layers: SceneLayers
-  before: Block[]
+  before: SourceBlock[]
   after: PredictedBlock[]
 }

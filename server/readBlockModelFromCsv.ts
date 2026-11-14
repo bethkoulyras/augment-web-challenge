@@ -28,7 +28,10 @@ export async function readBlockModelFromCsv(blockModelPath: string, muckpileMode
     }
 
     predictedById.set(id, {
-      ...original,
+      IJK: original.IJK,
+      Xinc: original.Xinc,
+      Yinc: original.Yinc,
+      Zinc: original.Zinc,
       XC: readNumber(row, 'XF'),
       YC: readNumber(row, 'YF'),
       ZC: readNumber(row, 'ZF'),
