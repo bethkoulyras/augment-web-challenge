@@ -8,9 +8,10 @@ interface SceneViewerProps {
   view: ModelView
   colourScale: ColourScale
   slicing: boolean
+  onSliceChange: (y: number) => void
 }
 
-export default function SceneViewer({ models, view, colourScale, slicing }: SceneViewerProps) {
+export default function SceneViewer({ models, view, colourScale, slicing, onSliceChange }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
 
@@ -18,13 +19,13 @@ export default function SceneViewer({ models, view, colourScale, slicing }: Scen
     const container = containerRef.current
     if (!container) return
 
-    const viewer = new Viewer(container, models)
+    const viewer = new Viewer(container, models, onSliceChange)
     viewerRef.current = viewer
     return () => {
       viewerRef.current = null
       viewer.dispose()
     }
-  }, [models])
+  }, [models, onSliceChange])
 
   useEffect(() => viewerRef.current?.setView(view), [models, view])
 

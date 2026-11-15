@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import SceneViewer from './components/SceneViewer'
 import ColourPalette from './components/ColourPalette'
+import CrossSectionPanel from './components/CrossSectionPanel'
 import { createColourScale } from './data/blockColours'
 import { csvFiles } from './data/csvFiles'
 import { createBlockModels } from './data/blockModels'
@@ -13,6 +14,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<ModelView>('pre')
   const [slicing, setSlicing] = useState(false)
+  const [sliceY, setSliceY] = useState<number | null>(null)
+  const [paletteCollapsed, setPaletteCollapsed] = useState(false)
   const [colourField, setColourField] = useState<ColourField>('grade_01')
   const isLoading = csvFiles.some((file) => !data[file])
   const mbmRows = data['1_mbm.csv']
@@ -41,13 +44,22 @@ export default function App() {
     return () => controller.abort()
   }, [])
 
+  const toggleSlicing = (): void => {
+    const enabled = !slicing
+    setSlicing(enabled)
+    setPaletteCollapsed(enabled)
+  }
+
   return (
     <main className="relative h-full w-full">
       {!isLoading && models && colourScale && (
         <>
-          <SceneViewer models={models} view={view} colourScale={colourScale} slicing={slicing} />
-          <ColourPalette scale={colourScale} onChange={setColourField} />
-          <button type="button" aria-pressed={slicing} onClick={() => setSlicing((current) => !current)} className="absolute top-6 right-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-300/60 aria-pressed:bg-cyan-300/10 aria-pressed:text-cyan-100">Slice model</button>
+          <SceneViewer models={models} view={view} colourScale={colourScale} slicing={slicing} onSliceChange={setSliceY} />
+          <div className={"absolute top-20 left-6 z-10 flex max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)] " + (slicing ? "w-80" : "w-72")}>
+            <ColourPalette scale={colourScale} onChange={setColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} />
+            {slicing && sliceY !== null && <CrossSectionPanel models={models} view={view} y={sliceY} scale={colourScale} />}
+          </div>
+          <button type="button" aria-pressed={slicing} onClick={toggleSlicing} className="absolute top-6 right-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-300/60 aria-pressed:bg-cyan-300/10 aria-pressed:text-cyan-100">Slice model</button>
         </>
       )}
       {!isLoading && models && (

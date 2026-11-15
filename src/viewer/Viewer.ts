@@ -36,7 +36,7 @@ export class Viewer {
   private renderFrame: number | null = null
   private disposed = false
 
-  constructor(container: HTMLElement, models: BlockModels) {
+  constructor(container: HTMLElement, models: BlockModels, onSliceChange: (y: number) => void) {
     this.container = container
     this.models = models
     const first = models.pre[0]
@@ -69,6 +69,7 @@ export class Viewer {
       bounds: this.bounds,
       step: models.pre[0]?.depth ?? 1,
       render: this.render,
+      onChange: (position) => onSliceChange(this.origin.y - position),
     })
   }
 

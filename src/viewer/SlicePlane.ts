@@ -29,6 +29,7 @@ interface SlicePlaneOptions {
   bounds: Box3;
   step: number;
   render: () => void;
+  onChange: (position: number) => void;
 }
 
 export class SlicePlane {
@@ -123,7 +124,7 @@ diffuseColor.rgb = applySliceHighlight(diffuseColor.rgb);`,
   }
 
   public setBounds(bounds: Box3): void {
-    this.bounds.union(bounds);
+    this.bounds.copy(bounds);
     this.resizePlane();
     this.moveTo(this.position.value);
   }
@@ -172,6 +173,7 @@ diffuseColor.rgb = applySliceHighlight(diffuseColor.rgb);`,
       this.bounds.max.z - step / 2,
     );
     this.group.position.z = this.position.value;
+    this.options.onChange(this.position.value);
     this.options.render();
   }
 
