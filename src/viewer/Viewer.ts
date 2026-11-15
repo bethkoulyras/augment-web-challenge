@@ -14,6 +14,7 @@ import {
   WebGLRenderer,
 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { SlicePlane } from './SlicePlane'
 import { colourForValue } from '../data/blockColours'
 import type { ColourScale } from '../data/blockColours'
 import type { BlockModels, ModelView } from '../data/blockModels'
@@ -31,6 +32,8 @@ export class Viewer {
   private readonly renderer: WebGLRenderer
   private readonly controls: OrbitControls
   private readonly resizeObserver: ResizeObserver
+  private slicer: SlicePlane | null = null
+  private renderFrame: number | null = null
   private disposed = false
 
   constructor(container: HTMLElement, models: BlockModels) {
@@ -57,6 +60,16 @@ export class Viewer {
     this.resizeObserver.observe(container)
     this.resize()
     this.resetCamera()
+    this.slicer = new SlicePlane({
+      canvas: this.renderer.domElement,
+      camera: this.camera,
+      controls: this.controls,
+      scene: this.scene,
+      material: this.material,
+      bounds: this.bounds,
+      step: models.pre[0]?.depth ?? 1,
+      render: this.render,
+    })
   }
 
   public setView(view: ModelView): void {
@@ -70,6 +83,7 @@ export class Viewer {
     this.mesh.instanceMatrix.needsUpdate = true
     this.mesh.computeBoundingBox()
     this.mesh.computeBoundingSphere()
+    if (this.mesh.boundingBox) this.slicer?.setBounds(this.mesh.boundingBox)
     this.render()
   }
 
@@ -83,6 +97,10 @@ export class Viewer {
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
     if (firstUpdate) this.material.needsUpdate = true
     this.render()
+  }
+
+  public setSliceEnabled(enabled: boolean): void {
+    this.slicer?.setEnabled(enabled)
   }
 
   public resetCamera(): void {
@@ -102,6 +120,8 @@ export class Viewer {
   public dispose(): void {
     if (this.disposed) return
     this.disposed = true
+    if (this.renderFrame !== null) cancelAnimationFrame(this.renderFrame)
+    this.slicer?.dispose()
     this.resizeObserver.disconnect()
     this.controls.removeEventListener('change', this.render)
     this.controls.dispose()
@@ -124,6 +144,11 @@ export class Viewer {
   }
 
   private readonly render = (): void => {
-    if (!this.disposed) this.renderer.render(this.scene, this.camera)
+    if (this.disposed || this.renderFrame !== null) return
+    this.renderFrame = requestAnimationFrame(() => {
+      this.renderFrame = null
+      if (this.disposed) return
+      this.renderer.render(this.scene, this.camera)
+    })
   }
 }

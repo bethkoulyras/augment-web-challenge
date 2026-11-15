@@ -7,9 +7,10 @@ interface SceneViewerProps {
   models: BlockModels
   view: ModelView
   colourScale: ColourScale
+  slicing: boolean
 }
 
-export default function SceneViewer({ models, view, colourScale }: SceneViewerProps) {
+export default function SceneViewer({ models, view, colourScale, slicing }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
 
@@ -29,11 +30,13 @@ export default function SceneViewer({ models, view, colourScale }: SceneViewerPr
 
   useEffect(() => viewerRef.current?.setColourScale(colourScale), [models, colourScale])
 
+  useEffect(() => viewerRef.current?.setSliceEnabled(slicing), [models, slicing])
+
   return (
     <div
       ref={containerRef}
-      className="h-full w-full overflow-hidden"
-      role="img"
+      className="relative h-full w-full overflow-hidden"
+      role="group"
       aria-label={view === 'pre' ? '3D pre-blast block model' : '3D predicted post-blast block model'}
     />
   )

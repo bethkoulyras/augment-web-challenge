@@ -12,6 +12,7 @@ export default function App() {
   const [data, setData] = useState<Record<string, CsvRow[]>>({})
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<ModelView>('pre')
+  const [slicing, setSlicing] = useState(false)
   const [colourField, setColourField] = useState<ColourField>('grade_01')
   const isLoading = csvFiles.some((file) => !data[file])
   const mbmRows = data['1_mbm.csv']
@@ -44,8 +45,9 @@ export default function App() {
     <main className="relative h-full w-full">
       {!isLoading && models && colourScale && (
         <>
-          <SceneViewer models={models} view={view} colourScale={colourScale} />
+          <SceneViewer models={models} view={view} colourScale={colourScale} slicing={slicing} />
           <ColourPalette scale={colourScale} onChange={setColourField} />
+          <button type="button" aria-pressed={slicing} onClick={() => setSlicing((current) => !current)} className="absolute top-6 right-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-300/60 aria-pressed:bg-cyan-300/10 aria-pressed:text-cyan-100">Slice model</button>
         </>
       )}
       {!isLoading && models && (
