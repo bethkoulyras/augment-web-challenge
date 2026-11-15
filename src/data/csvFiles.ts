@@ -1,5 +1,4 @@
 export const csvFiles = [
-  '1_blockmodel.csv',
   '1_mbm.csv',
   '1_pre_surface.csv',
   '1_pst_surface.csv',

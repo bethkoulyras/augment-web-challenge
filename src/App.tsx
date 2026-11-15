@@ -1,12 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import SceneViewer from './components/SceneViewer'
 import { csvFiles } from './data/csvFiles'
+import { createBlockModels } from './data/blockModels'
+import type { ModelView } from './data/blockModels'
 import { loadCsv } from './utils/loadCsv'
 import type { CsvRow } from './utils/loadCsv'
 
 export default function App() {
   const [data, setData] = useState<Record<string, CsvRow[]>>({})
   const [error, setError] = useState<string | null>(null)
+  const [view, setView] = useState<ModelView>('pre')
+  const isLoading = csvFiles.some((file) => !data[file])
+  const mbmRows = data['1_mbm.csv']
+  const models = useMemo(() => mbmRows ? createBlockModels(mbmRows) : null, [mbmRows])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -15,6 +21,7 @@ export default function App() {
       for (const file of csvFiles) {
         const rows = await loadCsv('/' + file, controller.signal)
         if (controller.signal.aborted) return
+        console.log(file + ': loaded')
         setData((current) => ({ ...current, [file]: rows }))
       }
     }
@@ -30,16 +37,21 @@ export default function App() {
 
   return (
     <main className="relative h-full w-full">
-      <SceneViewer />
-      <div className="absolute top-4 left-4 rounded border border-neutral-700 bg-neutral-900/90 px-4 py-3 text-sm">
-        {error ? <p role="alert">{error}</p> : (
-          <ul role="status" className="space-y-1">
-            {csvFiles.map((file) => (
-              <li key={file}>{file}: {data[file] ? 'Loaded' : 'Loading…'}</li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {!isLoading && models && <SceneViewer models={models} view={view} />}
+      {!isLoading && models && (
+        <div role="group" aria-label="Block model view" className="absolute bottom-8 left-1/2 flex max-w-[calc(100%_-_2rem)] -translate-x-1/2 gap-2 whitespace-nowrap rounded border border-neutral-700 bg-neutral-900/90 p-2 text-sm">
+          <button type="button" aria-pressed={view === 'pre'} onClick={() => setView('pre')} className="cursor-pointer rounded px-3 py-2 text-neutral-400 hover:text-white aria-pressed:bg-neutral-700 aria-pressed:text-white">Pre-blast</button>
+          <button type="button" aria-pressed={view === 'post'} onClick={() => setView('post')} className="cursor-pointer rounded px-3 py-2 text-neutral-400 hover:text-white aria-pressed:bg-neutral-700 aria-pressed:text-white">Predicted post-blast</button>
+        </div>
+      )}
+      {error ? (
+        <p role="alert" className="absolute inset-0 grid place-items-center p-6 text-red-300">{error}</p>
+      ) : isLoading && (
+        <div role="status" className="absolute inset-0 grid place-items-center">
+          <span className="sr-only">Loading data…</span>
+          <span aria-hidden="true" className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-700 border-t-neutral-200 motion-reduce:animate-none" />
+        </div>
+      )}
     </main>
   )
 }
