@@ -1,13 +1,15 @@
 import { useEffect, useRef } from 'react'
 import { Viewer } from '../viewer/Viewer'
+import type { ColourScale } from '../data/blockColours'
 import type { BlockModels, ModelView } from '../data/blockModels'
 
 interface SceneViewerProps {
   models: BlockModels
   view: ModelView
+  colourScale: ColourScale
 }
 
-export default function SceneViewer({ models, view }: SceneViewerProps) {
+export default function SceneViewer({ models, view, colourScale }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
 
@@ -24,6 +26,8 @@ export default function SceneViewer({ models, view }: SceneViewerProps) {
   }, [models])
 
   useEffect(() => viewerRef.current?.setView(view), [models, view])
+
+  useEffect(() => viewerRef.current?.setColourScale(colourScale), [models, colourScale])
 
   return (
     <div

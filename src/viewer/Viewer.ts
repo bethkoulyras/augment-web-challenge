@@ -2,6 +2,7 @@ import {
   AmbientLight,
   Box3,
   BoxGeometry,
+  Color,
   DirectionalLight,
   InstancedMesh,
   MathUtils,
@@ -13,6 +14,8 @@ import {
   WebGLRenderer,
 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
+import { colourForValue } from '../data/blockColours'
+import type { ColourScale } from '../data/blockColours'
 import type { BlockModels, ModelView } from '../data/blockModels'
 
 export class Viewer {
@@ -21,7 +24,7 @@ export class Viewer {
   private readonly scene = new Scene()
   private readonly camera = new PerspectiveCamera(45, 1, 0.1, 100)
   private readonly geometry = new BoxGeometry(1, 1, 1)
-  private readonly material = new MeshLambertMaterial({ color: '#788dd8' })
+  private readonly material = new MeshLambertMaterial({ color: 0xffffff })
   private readonly mesh: InstancedMesh
   private readonly origin = new Vector3()
   private readonly bounds = new Box3()
@@ -67,6 +70,18 @@ export class Viewer {
     this.mesh.instanceMatrix.needsUpdate = true
     this.mesh.computeBoundingBox()
     this.mesh.computeBoundingSphere()
+    this.render()
+  }
+
+  public setColourScale(scale: ColourScale): void {
+    const firstUpdate = this.mesh.instanceColor === null
+    const colour = new Color()
+    this.models.pre.forEach((block, index) => {
+      colour.setHex(colourForValue(scale, block.attributes[scale.field]))
+      this.mesh.setColorAt(index, colour)
+    })
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
+    if (firstUpdate) this.material.needsUpdate = true
     this.render()
   }
 

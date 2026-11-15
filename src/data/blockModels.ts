@@ -1,5 +1,13 @@
 import type { CsvRow } from '../utils/loadCsv'
 
+export const gradeFields = [
+  'grade_01', 'grade_02', 'grade_03', 'grade_04', 'grade_05', 'grade_06',
+  'grade_07', 'grade_08', 'grade_09', 'grade_10', 'grade_11',
+] as const
+export const categoryFields = ['cat_1', 'cat_2', 'cat_3'] as const
+export type ColourField = typeof gradeFields[number] | typeof categoryFields[number]
+const attributeFields = [...gradeFields, ...categoryFields]
+
 export interface Block {
   id: number
   x: number
@@ -8,6 +16,7 @@ export interface Block {
   width: number
   depth: number
   height: number
+  attributes: Record<ColourField, number | null>
 }
 
 export interface BlockModels {
@@ -23,6 +32,7 @@ export function createBlockModels(rows: CsvRow[]): BlockModels {
   for (const row of rows) {
     if (!row.IJK || Number(row.PREN) !== 1) continue
 
+    const attributes = Object.fromEntries(attributeFields.map((field) => [field, row[field]?.trim() ? Number(row[field]) : null])) as Record<ColourField, number | null>
     const block: Block = {
       id: Number(row.IJK),
       x: Number(row.XC),
@@ -31,6 +41,7 @@ export function createBlockModels(rows: CsvRow[]): BlockModels {
       width: Number(row.Xinc),
       depth: Number(row.Yinc),
       height: Number(row.Zinc),
+      attributes,
     }
     models.pre.push(block)
     models.post.push({ ...block, x: Number(row.XF), y: Number(row.YF), z: Number(row.ZF) })

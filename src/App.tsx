@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import SceneViewer from './components/SceneViewer'
+import ColourPalette from './components/ColourPalette'
+import { createColourScale } from './data/blockColours'
 import { csvFiles } from './data/csvFiles'
 import { createBlockModels } from './data/blockModels'
-import type { ModelView } from './data/blockModels'
+import type { ColourField, ModelView } from './data/blockModels'
 import { loadCsv } from './utils/loadCsv'
 import type { CsvRow } from './utils/loadCsv'
 
@@ -10,9 +12,12 @@ export default function App() {
   const [data, setData] = useState<Record<string, CsvRow[]>>({})
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<ModelView>('pre')
+  const [colourField, setColourField] = useState<ColourField>('grade_01')
   const isLoading = csvFiles.some((file) => !data[file])
   const mbmRows = data['1_mbm.csv']
   const models = useMemo(() => mbmRows ? createBlockModels(mbmRows) : null, [mbmRows])
+
+  const colourScale = useMemo(() => models ? createColourScale(models.pre, colourField) : null, [models, colourField])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -37,7 +42,12 @@ export default function App() {
 
   return (
     <main className="relative h-full w-full">
-      {!isLoading && models && <SceneViewer models={models} view={view} />}
+      {!isLoading && models && colourScale && (
+        <>
+          <SceneViewer models={models} view={view} colourScale={colourScale} />
+          <ColourPalette scale={colourScale} onChange={setColourField} />
+        </>
+      )}
       {!isLoading && models && (
         <div role="group" aria-label="Block model view" className="absolute bottom-8 left-1/2 flex max-w-[calc(100%_-_2rem)] -translate-x-1/2 gap-2 whitespace-nowrap rounded border border-neutral-700 bg-neutral-900/90 p-2 text-sm">
           <button type="button" aria-pressed={view === 'pre'} onClick={() => setView('pre')} className="cursor-pointer rounded px-3 py-2 text-neutral-400 hover:text-white aria-pressed:bg-neutral-700 aria-pressed:text-white">Pre-blast</button>
