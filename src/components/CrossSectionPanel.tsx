@@ -1,31 +1,20 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { drawCrossSection } from "../viewer/drawCrossSection";
 import type { ColourScale } from "../data/blockColours";
-import type { BlockModels, ModelView } from "../data/blockModels";
+import type { Block } from "../data/blockModels";
 
 interface CrossSectionPanelProps {
-  models: BlockModels;
-  view: ModelView;
-  y: number;
+  blocks: readonly Block[];
   scale: ColourScale;
   onInspect?: () => void;
 }
 
 export default function CrossSectionPanel({
-  models,
-  view,
-  y,
+  blocks,
   scale,
   onInspect,
 }: CrossSectionPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const blocks = useMemo(
-    () =>
-      models[view]
-        .filter((block) => Math.abs(block.y - y) <= block.depth / 2 + 0.001)
-        .sort((a, b) => a.y - b.y),
-    [models, view, y],
-  );
 
   useEffect(() => {
     const canvas = canvasRef.current;

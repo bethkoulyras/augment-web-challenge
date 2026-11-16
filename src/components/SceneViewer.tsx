@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Viewer } from '../viewer/Viewer'
 import type { ViewerMode } from '../viewer/Viewer'
 import type { ColourScale } from '../data/blockColours'
-import type { BlockModels, ModelView } from '../data/blockModels'
+import type { Block, BlockModels, ModelView } from '../data/blockModels'
 
 interface SceneViewerProps {
   models: BlockModels
@@ -10,10 +10,11 @@ interface SceneViewerProps {
   colourScale: ColourScale
   mode: ViewerMode
   sliceY: number | null
+  sectionBlocks: readonly Block[]
   onSliceChange: (y: number) => void
 }
 
-export default function SceneViewer({ models, view, colourScale, mode, sliceY, onSliceChange }: SceneViewerProps) {
+export default function SceneViewer({ models, view, colourScale, mode, sliceY, sectionBlocks, onSliceChange }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
 
@@ -42,6 +43,10 @@ export default function SceneViewer({ models, view, colourScale, mode, sliceY, o
   useEffect(() => {
     if (mode === 'inspect' && sliceY !== null) viewerRef.current?.setSlicePosition(sliceY)
   }, [models, mode, sliceY])
+
+  useEffect(() => {
+    viewerRef.current?.setSectionBlocks(mode === 'inspect' ? sectionBlocks : [])
+  }, [models, mode, sectionBlocks])
 
   return (
     <div

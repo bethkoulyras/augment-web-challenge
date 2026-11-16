@@ -25,6 +25,13 @@ export default function App() {
 
   const colourScale = useMemo(() => models ? createColourScale(models.pre, colourField) : null, [models, colourField])
 
+  const sectionBlocks = useMemo(() => {
+    if (!models || sliceY === null) return []
+    return models[view]
+      .filter((block) => Math.abs(block.y - sliceY) <= block.depth / 2 + 0.001)
+      .sort((a, b) => a.y - b.y)
+  }, [models, view, sliceY])
+
   useEffect(() => {
     const controller = new AbortController()
 
@@ -56,10 +63,10 @@ export default function App() {
     <main className="relative h-full w-full">
       {!isLoading && models && colourScale && (
         <>
-          <SceneViewer models={models} view={view} colourScale={colourScale} mode={mode} sliceY={sliceY} onSliceChange={setSliceY} />
+          <SceneViewer models={models} view={view} colourScale={colourScale} mode={mode} sliceY={sliceY} sectionBlocks={sectionBlocks} onSliceChange={setSliceY} />
           <div className={"absolute top-20 left-6 z-10 flex max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)] " + (mode === 'model' ? "w-72" : "w-80")}>
             <ColourPalette scale={colourScale} onChange={setColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} />
-            {mode !== 'model' && sliceY !== null && <CrossSectionPanel models={models} view={view} y={sliceY} scale={colourScale} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
+            {mode !== 'model' && sliceY !== null && <CrossSectionPanel blocks={sectionBlocks} scale={colourScale} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
           </div>
           {mode === 'inspect' && sliceY !== null && (
             <SectionSlider blocks={models[view]} position={sliceY} onChange={setSliceY} />
