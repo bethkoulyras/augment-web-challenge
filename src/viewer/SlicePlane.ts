@@ -58,6 +58,7 @@ export class SlicePlane {
   private readonly frame = new Line(new BufferGeometry(), this.edgeMaterial);
   private readonly position = new Uniform(0);
   private readonly active = new Uniform(false);
+  private readonly clippingPlane = new Plane(new Vector3(0, 0, -1), 0);
   private readonly raycaster = new Raycaster();
   private readonly pointer = new Vector2();
   private readonly dragPlane = new Plane();
@@ -123,6 +124,12 @@ diffuseColor.rgb = applySliceHighlight(diffuseColor.rgb);`,
     this.options.render();
   }
 
+  public setClippingEnabled(enabled: boolean): void {
+    this.options.material.clippingPlanes = enabled ? [this.clippingPlane] : [];
+    this.options.material.needsUpdate = true;
+    this.options.render();
+  }
+
   public setBounds(bounds: Box3): void {
     this.bounds.copy(bounds);
     this.resizePlane();
@@ -173,6 +180,7 @@ diffuseColor.rgb = applySliceHighlight(diffuseColor.rgb);`,
       this.bounds.max.z - step / 2,
     );
     this.group.position.z = this.position.value;
+    this.clippingPlane.constant = this.position.value + step / 2 + 0.001;
     this.options.onChange(this.position.value);
     this.options.render();
   }

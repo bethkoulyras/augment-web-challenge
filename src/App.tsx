@@ -6,6 +6,7 @@ import { createColourScale } from './data/blockColours'
 import { csvFiles } from './data/csvFiles'
 import { createBlockModels } from './data/blockModels'
 import type { ColourField, ModelView } from './data/blockModels'
+import type { ViewerMode } from './viewer/Viewer'
 import { loadCsv } from './utils/loadCsv'
 import type { CsvRow } from './utils/loadCsv'
 
@@ -13,7 +14,7 @@ export default function App() {
   const [data, setData] = useState<Record<string, CsvRow[]>>({})
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<ModelView>('pre')
-  const [slicing, setSlicing] = useState(false)
+  const [mode, setMode] = useState<ViewerMode>('model')
   const [sliceY, setSliceY] = useState<number | null>(null)
   const [paletteCollapsed, setPaletteCollapsed] = useState(false)
   const [colourField, setColourField] = useState<ColourField>('grade_01')
@@ -45,8 +46,8 @@ export default function App() {
   }, [])
 
   const toggleSlicing = (): void => {
-    const enabled = !slicing
-    setSlicing(enabled)
+    const enabled = mode === 'model'
+    setMode(enabled ? 'slice' : 'model')
     setPaletteCollapsed(enabled)
   }
 
@@ -54,12 +55,19 @@ export default function App() {
     <main className="relative h-full w-full">
       {!isLoading && models && colourScale && (
         <>
-          <SceneViewer models={models} view={view} colourScale={colourScale} slicing={slicing} onSliceChange={setSliceY} />
-          <div className={"absolute top-20 left-6 z-10 flex max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)] " + (slicing ? "w-80" : "w-72")}>
+          <SceneViewer models={models} view={view} colourScale={colourScale} mode={mode} onSliceChange={setSliceY} />
+          <div className={"absolute top-20 left-6 z-10 flex max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)] " + (mode === 'model' ? "w-72" : "w-80")}>
             <ColourPalette scale={colourScale} onChange={setColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} />
-            {slicing && sliceY !== null && <CrossSectionPanel models={models} view={view} y={sliceY} scale={colourScale} />}
+            {mode !== 'model' && sliceY !== null && <CrossSectionPanel models={models} view={view} y={sliceY} scale={colourScale} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
           </div>
-          <button type="button" aria-pressed={slicing} onClick={toggleSlicing} className="absolute top-6 right-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-300/60 aria-pressed:bg-cyan-300/10 aria-pressed:text-cyan-100">Slice model</button>
+          {mode === 'inspect' ? (
+            <>
+              <h1 className="absolute top-6 left-96 z-10 text-sm font-medium text-neutral-200">Inspect section</h1>
+              <button type="button" onClick={() => setMode('slice')} className="absolute top-6 right-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-cyan-300">Back to slice</button>
+            </>
+          ) : (
+            <button type="button" aria-pressed={mode === 'slice'} onClick={toggleSlicing} className="absolute top-6 right-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-300/60 aria-pressed:bg-cyan-300/10 aria-pressed:text-cyan-100">Slice model</button>
+          )}
         </>
       )}
       {!isLoading && models && (

@@ -8,6 +8,7 @@ interface CrossSectionPanelProps {
   view: ModelView;
   y: number;
   scale: ColourScale;
+  onInspect?: () => void;
 }
 
 export default function CrossSectionPanel({
@@ -15,6 +16,7 @@ export default function CrossSectionPanel({
   view,
   y,
   scale,
+  onInspect,
 }: CrossSectionPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const blocks = useMemo(
@@ -56,6 +58,11 @@ export default function CrossSectionPanel({
           </p>
         )}
       </div>
+      {onInspect && (
+        <button type="button" disabled={!blocks.length} onClick={onInspect} className="w-full cursor-pointer rounded-lg border border-cyan-200/30 bg-cyan-200/10 px-3 py-2 text-cyan-100 hover:bg-cyan-200/20 focus-visible:outline-2 focus-visible:outline-cyan-200 disabled:cursor-default disabled:opacity-40">
+          Inspect section
+        </button>
+      )}
     </section>
   );
 }

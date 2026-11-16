@@ -19,6 +19,8 @@ import { colourForValue } from '../data/blockColours'
 import type { ColourScale } from '../data/blockColours'
 import type { BlockModels, ModelView } from '../data/blockModels'
 
+export type ViewerMode = 'model' | 'slice' | 'inspect'
+
 export class Viewer {
   private readonly container: HTMLElement
   private readonly models: BlockModels
@@ -43,6 +45,7 @@ export class Viewer {
     if (first) this.origin.set(first.x, first.y, first.z)
 
     this.renderer = new WebGLRenderer({ antialias: true, alpha: true })
+    this.renderer.localClippingEnabled = true
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     container.appendChild(this.renderer.domElement)
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
@@ -100,8 +103,9 @@ export class Viewer {
     this.render()
   }
 
-  public setSliceEnabled(enabled: boolean): void {
-    this.slicer?.setEnabled(enabled)
+  public setMode(mode: ViewerMode): void {
+    this.slicer?.setEnabled(mode === 'slice')
+    this.slicer?.setClippingEnabled(mode === 'inspect')
   }
 
   public resetCamera(): void {

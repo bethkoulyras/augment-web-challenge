@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Viewer } from '../viewer/Viewer'
+import type { ViewerMode } from '../viewer/Viewer'
 import type { ColourScale } from '../data/blockColours'
 import type { BlockModels, ModelView } from '../data/blockModels'
 
@@ -7,11 +8,11 @@ interface SceneViewerProps {
   models: BlockModels
   view: ModelView
   colourScale: ColourScale
-  slicing: boolean
+  mode: ViewerMode
   onSliceChange: (y: number) => void
 }
 
-export default function SceneViewer({ models, view, colourScale, slicing, onSliceChange }: SceneViewerProps) {
+export default function SceneViewer({ models, view, colourScale, mode, onSliceChange }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
 
@@ -31,14 +32,14 @@ export default function SceneViewer({ models, view, colourScale, slicing, onSlic
 
   useEffect(() => viewerRef.current?.setColourScale(colourScale), [models, colourScale])
 
-  useEffect(() => viewerRef.current?.setSliceEnabled(slicing), [models, slicing])
+  useEffect(() => viewerRef.current?.setMode(mode), [models, mode])
 
   return (
     <div
       ref={containerRef}
       className="relative h-full w-full overflow-hidden"
       role="group"
-      aria-label={view === 'pre' ? '3D pre-blast block model' : '3D predicted post-blast block model'}
+      aria-label={mode === 'inspect' ? '3D section inspection' : view === 'pre' ? '3D pre-blast block model' : '3D predicted post-blast block model'}
     />
   )
 }
