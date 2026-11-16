@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import SceneViewer from './components/SceneViewer'
 import ColourPalette from './components/ColourPalette'
 import CrossSectionPanel from './components/CrossSectionPanel'
+import SectionSlider from './components/SectionSlider'
 import { createColourScale } from './data/blockColours'
 import { csvFiles } from './data/csvFiles'
 import { createBlockModels } from './data/blockModels'
@@ -55,11 +56,14 @@ export default function App() {
     <main className="relative h-full w-full">
       {!isLoading && models && colourScale && (
         <>
-          <SceneViewer models={models} view={view} colourScale={colourScale} mode={mode} onSliceChange={setSliceY} />
+          <SceneViewer models={models} view={view} colourScale={colourScale} mode={mode} sliceY={sliceY} onSliceChange={setSliceY} />
           <div className={"absolute top-20 left-6 z-10 flex max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)] " + (mode === 'model' ? "w-72" : "w-80")}>
             <ColourPalette scale={colourScale} onChange={setColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} />
             {mode !== 'model' && sliceY !== null && <CrossSectionPanel models={models} view={view} y={sliceY} scale={colourScale} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
           </div>
+          {mode === 'inspect' && sliceY !== null && (
+            <SectionSlider blocks={models[view]} position={sliceY} onChange={setSliceY} />
+          )}
           <button
             type="button"
             aria-pressed={mode === 'inspect' ? undefined : mode === 'slice'}

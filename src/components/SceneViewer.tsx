@@ -9,10 +9,11 @@ interface SceneViewerProps {
   view: ModelView
   colourScale: ColourScale
   mode: ViewerMode
+  sliceY: number | null
   onSliceChange: (y: number) => void
 }
 
-export default function SceneViewer({ models, view, colourScale, mode, onSliceChange }: SceneViewerProps) {
+export default function SceneViewer({ models, view, colourScale, mode, sliceY, onSliceChange }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
 
@@ -37,6 +38,10 @@ export default function SceneViewer({ models, view, colourScale, mode, onSliceCh
     const sidebarSpacing = 24 * 2
     viewerRef.current?.setMode(mode, sidebarWidth + sidebarSpacing)
   }, [models, mode])
+
+  useEffect(() => {
+    if (mode === 'inspect' && sliceY !== null) viewerRef.current?.setSlicePosition(sliceY)
+  }, [models, mode, sliceY])
 
   return (
     <div

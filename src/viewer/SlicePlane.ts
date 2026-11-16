@@ -176,7 +176,7 @@ diffuseColor.rgb = applySliceHighlight(diffuseColor.rgb);`,
     this.frame.computeLineDistances();
   }
 
-  private moveTo(position: number): void {
+  public moveTo(position: number): void {
     const step = this.options.step;
     this.position.value = MathUtils.clamp(
       Math.round(position / step) * step,

@@ -130,6 +130,19 @@ export class Viewer {
     this.render()
   }
 
+  public setSlicePosition(y: number): void {
+    if (!this.slicer) return
+    const previous = this.slicer.getPosition()
+    this.slicer.moveTo(this.origin.y - y)
+
+    if (this.savedCamera) {
+      const offset = this.slicer.getPosition() - previous
+      this.camera.position.z += offset
+      this.controls.target.z += offset
+      this.controls.update()
+    }
+  }
+
   public resetCamera(): void {
     const centre = this.bounds.getCenter(new Vector3())
     const radius = Math.max(this.bounds.getSize(new Vector3()).length() / 2, 1)
