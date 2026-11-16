@@ -28,7 +28,7 @@ export default function ColourPalette({ scale, onChange, collapsed, onToggle }: 
         aria-expanded={!collapsed}
         aria-controls="colour-palette-controls"
         onClick={onToggle}
-        className="flex w-full cursor-pointer items-center justify-between gap-3 rounded text-left focus-visible:outline-2 focus-visible:outline-violet-300"
+        className="flex w-full cursor-pointer items-center justify-between gap-3 rounded text-left focus-visible:outline-2 focus-visible:outline-neutral-300"
       >
         <span>Colours <span className="ml-2 font-mono text-neutral-200">{scale.field}</span></span>
         <span aria-hidden="true">{collapsed ? "▾" : "▴"}</span>
@@ -46,7 +46,7 @@ export default function ColourPalette({ scale, onChange, collapsed, onToggle }: 
             onClick={() => {
               if (categorical) onChange(gradeFields[0]);
             }}
-            className="cursor-pointer rounded-md px-3 py-2 text-neutral-500 transition-colors hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-violet-300 aria-pressed:bg-neutral-800 aria-pressed:text-white"
+            className="cursor-pointer rounded-md px-3 py-2 text-neutral-500 transition-colors hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:bg-neutral-800 aria-pressed:text-white"
           >
             Grades
           </button>
@@ -56,7 +56,7 @@ export default function ColourPalette({ scale, onChange, collapsed, onToggle }: 
             onClick={() => {
               if (!categorical) onChange(categoryFields[0]);
             }}
-            className="cursor-pointer rounded-md px-3 py-2 text-neutral-500 transition-colors hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-violet-300 aria-pressed:bg-neutral-800 aria-pressed:text-white"
+            className="cursor-pointer rounded-md px-3 py-2 text-neutral-500 transition-colors hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:bg-neutral-800 aria-pressed:text-white"
           >
             Categories
           </button>
@@ -77,7 +77,7 @@ export default function ColourPalette({ scale, onChange, collapsed, onToggle }: 
               aria-label={"Colour by " + field}
               aria-pressed={scale.field === field}
               onClick={() => onChange(field)}
-              className="cursor-pointer rounded-md border border-neutral-700/70 bg-neutral-800/40 py-2 font-mono text-neutral-400 transition-colors hover:border-neutral-500 hover:text-white focus-visible:outline-2 focus-visible:outline-violet-300 aria-pressed:border-violet-300/60 aria-pressed:bg-violet-300/15 aria-pressed:text-violet-100"
+              className="cursor-pointer rounded-md border border-neutral-700/70 bg-neutral-800/40 py-2 font-mono text-neutral-400 transition-colors hover:border-neutral-500 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:border-neutral-500 aria-pressed:bg-neutral-700 aria-pressed:text-neutral-100"
             >
               {categorical ? field : field.slice(6)}
             </button>

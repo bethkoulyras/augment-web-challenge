@@ -32,7 +32,11 @@ export default function SceneViewer({ models, view, colourScale, mode, onSliceCh
 
   useEffect(() => viewerRef.current?.setColourScale(colourScale), [models, colourScale])
 
-  useEffect(() => viewerRef.current?.setMode(mode), [models, mode])
+  useEffect(() => {
+    const sidebarWidth = 320
+    const sidebarSpacing = 24 * 2
+    viewerRef.current?.setMode(mode, sidebarWidth + sidebarSpacing)
+  }, [models, mode])
 
   return (
     <div

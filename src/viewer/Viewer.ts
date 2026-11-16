@@ -35,6 +35,8 @@ export class Viewer {
   private readonly controls: OrbitControls
   private readonly resizeObserver: ResizeObserver
   private slicer: SlicePlane | null = null
+  private savedCamera: { position: Vector3; target: Vector3 } | null = null
+  private sidebarWidth = 0
   private renderFrame: number | null = null
   private disposed = false
 
@@ -88,6 +90,7 @@ export class Viewer {
     this.mesh.computeBoundingBox()
     this.mesh.computeBoundingSphere()
     if (this.mesh.boundingBox) this.slicer?.setBounds(this.mesh.boundingBox)
+    if (this.savedCamera) this.frameSection()
     this.render()
   }
 
@@ -103,9 +106,28 @@ export class Viewer {
     this.render()
   }
 
-  public setMode(mode: ViewerMode): void {
+  public setMode(mode: ViewerMode, sidebarWidth = 0): void {
+    const inspecting = mode === 'inspect'
     this.slicer?.setEnabled(mode === 'slice')
-    this.slicer?.setClippingEnabled(mode === 'inspect')
+    this.slicer?.setClippingEnabled(inspecting)
+    this.sidebarWidth = inspecting ? sidebarWidth : 0
+    this.resize()
+
+    if (inspecting) {
+      if (!this.savedCamera) {
+        this.savedCamera = {
+          position: this.camera.position.clone(),
+          target: this.controls.target.clone(),
+        }
+      }
+      this.frameSection()
+    } else if (this.savedCamera) {
+      this.camera.position.copy(this.savedCamera.position)
+      this.controls.target.copy(this.savedCamera.target)
+      this.savedCamera = null
+      this.controls.update()
+    }
+    this.render()
   }
 
   public resetCamera(): void {
@@ -138,11 +160,32 @@ export class Viewer {
     this.renderer.domElement.remove()
   }
 
+  private frameSection(): void {
+    const bounds = this.mesh.boundingBox
+    const width = this.container.clientWidth
+    const height = this.container.clientHeight
+    if (!bounds || !this.slicer || !width || !height) return
+
+    const centre = bounds.getCenter(new Vector3())
+    centre.z = this.slicer.getPosition()
+    const size = bounds.getSize(new Vector3())
+    const availableWidth = width - Math.min(this.sidebarWidth, width * 0.45)
+    const halfFov = MathUtils.degToRad(this.camera.fov) / 2
+    const distance = Math.max(size.x / (availableWidth / height), size.y, 1) / (2 * Math.tan(halfFov)) * 1.15
+
+    this.camera.position.copy(centre).addScaledVector(new Vector3(0, 0.22, 1).normalize(), distance)
+    this.controls.target.copy(centre)
+    this.controls.update()
+  }
+
   private readonly resize = (): void => {
     if (this.disposed) return
     const { clientWidth: width, clientHeight: height } = this.container
     if (width === 0 || height === 0) return
     this.camera.aspect = width / height
+    const sidebarWidth = Math.min(this.sidebarWidth, width * 0.45)
+    if (sidebarWidth) this.camera.setViewOffset(width, height, -sidebarWidth / 2, 0, width, height)
+    else this.camera.clearViewOffset()
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(width, height)
     this.render()

@@ -60,14 +60,14 @@ export default function App() {
             <ColourPalette scale={colourScale} onChange={setColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} />
             {mode !== 'model' && sliceY !== null && <CrossSectionPanel models={models} view={view} y={sliceY} scale={colourScale} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
           </div>
-          {mode === 'inspect' ? (
-            <>
-              <h1 className="absolute top-6 left-96 z-10 text-sm font-medium text-neutral-200">Inspect section</h1>
-              <button type="button" onClick={() => setMode('slice')} className="absolute top-6 right-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-cyan-300">Back to slice</button>
-            </>
-          ) : (
-            <button type="button" aria-pressed={mode === 'slice'} onClick={toggleSlicing} className="absolute top-6 right-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-cyan-300 aria-pressed:border-cyan-300/60 aria-pressed:bg-cyan-300/10 aria-pressed:text-cyan-100">Slice model</button>
-          )}
+          <button
+            type="button"
+            aria-pressed={mode === 'inspect' ? undefined : mode === 'slice'}
+            onClick={mode === 'inspect' ? () => setMode('slice') : toggleSlicing}
+            className={"absolute top-6 left-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:border-neutral-500 aria-pressed:bg-neutral-800 aria-pressed:text-neutral-100 " + (mode === 'model' ? "sm:left-84" : "sm:left-92")}
+          >
+            {mode === 'inspect' ? 'Back to slice' : 'Slice model'}
+          </button>
         </>
       )}
       {!isLoading && models && (

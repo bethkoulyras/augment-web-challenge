@@ -130,6 +130,10 @@ diffuseColor.rgb = applySliceHighlight(diffuseColor.rgb);`,
     this.options.render();
   }
 
+  public getPosition(): number {
+    return this.position.value;
+  }
+
   public setBounds(bounds: Box3): void {
     this.bounds.copy(bounds);
     this.resizePlane();

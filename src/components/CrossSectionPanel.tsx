@@ -59,7 +59,7 @@ export default function CrossSectionPanel({
         )}
       </div>
       {onInspect && (
-        <button type="button" disabled={!blocks.length} onClick={onInspect} className="w-full cursor-pointer rounded-lg border border-cyan-200/30 bg-cyan-200/10 px-3 py-2 text-cyan-100 hover:bg-cyan-200/20 focus-visible:outline-2 focus-visible:outline-cyan-200 disabled:cursor-default disabled:opacity-40">
+        <button type="button" disabled={!blocks.length} onClick={onInspect} className="w-full cursor-pointer rounded-lg border border-neutral-600 bg-neutral-800 px-3 py-2 text-neutral-100 hover:bg-neutral-700 focus-visible:outline-2 focus-visible:outline-neutral-300 disabled:cursor-default disabled:opacity-40">
           Inspect section
         </button>
       )}
