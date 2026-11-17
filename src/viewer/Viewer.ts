@@ -3,9 +3,12 @@ import {
   Box3,
   Box3Helper,
   BoxGeometry,
+  BufferGeometry,
   Color,
   DirectionalLight,
   InstancedMesh,
+  Line,
+  LineBasicMaterial,
   MathUtils,
   Matrix4,
   MeshLambertMaterial,
@@ -42,6 +45,12 @@ export class Viewer {
   private readonly resizeObserver: ResizeObserver
   private readonly hoverHighlight = new Box3Helper(new Box3(), 0xffffff)
   private readonly selectionHighlight = new Box3Helper(new Box3(), 0xffffff)
+  private readonly otherPositionHighlight = new Box3Helper(new Box3(), 0xc4b5fd)
+  private readonly otherPositionMaterial = this.otherPositionHighlight.material as LineBasicMaterial
+  private readonly movementLine = new Line(
+    new BufferGeometry(),
+    new LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthTest: false, depthWrite: false }),
+  )
   private readonly pointerDownPosition = new Vector2()
   private readonly raycaster = new Raycaster()
   private readonly pointer = new Vector2()
@@ -82,6 +91,14 @@ export class Viewer {
     light.position.set(1, 3, 2)
     this.hoverHighlight.visible = false
     this.selectionHighlight.visible = false
+    this.otherPositionHighlight.visible = false
+    this.otherPositionMaterial.transparent = true
+    this.otherPositionMaterial.opacity = 0.7
+    this.otherPositionMaterial.depthTest = false
+    this.otherPositionMaterial.depthWrite = false
+    this.movementLine.visible = false
+    this.movementLine.frustumCulled = false
+    this.scene.add(this.otherPositionHighlight, this.movementLine)
     this.scene.add(this.mesh, this.hoverHighlight, this.selectionHighlight, new AmbientLight(0xffffff, 0.8), light)
 
     this.setView('pre')
@@ -188,7 +205,24 @@ export class Viewer {
   public setSelectedBlock(block: Block | null): void {
     const index = block === null ? -1 : this.sectionBlocks.indexOf(block)
     this.selectionHighlight.visible = index !== -1
-    if (index !== -1) this.selectionHighlight.box.copy(this.sectionBoxes[index]).expandByScalar(0.005)
+    this.otherPositionHighlight.visible = false
+    this.movementLine.visible = false
+    if (index !== -1 && block) {
+      this.selectionHighlight.box.copy(this.sectionBoxes[index]).expandByScalar(0.005)
+      const otherView = this.currentView === 'pre' ? 'post' : 'pre'
+      const other = this.models[otherView].find((candidate) => candidate.id === block.id)
+      if (other) {
+        const start = this.sectionBoxes[index].getCenter(new Vector3())
+        const end = new Vector3(other.x - this.origin.x, other.z - this.origin.z, this.origin.y - other.y)
+        if (!start.equals(end)) {
+          this.otherPositionHighlight.box.setFromCenterAndSize(end, new Vector3(other.width, other.height, other.depth))
+          this.otherPositionMaterial.color.setHex(otherView === 'pre' ? 0xa5f3fc : 0xc4b5fd)
+          this.otherPositionHighlight.visible = true
+          this.movementLine.geometry.setFromPoints([start, end])
+          this.movementLine.visible = true
+        }
+      }
+    }
     this.render()
   }
 
@@ -212,6 +246,9 @@ export class Viewer {
     if (this.renderFrame !== null) cancelAnimationFrame(this.renderFrame)
     this.hoverHighlight.dispose()
     this.selectionHighlight.dispose()
+    this.otherPositionHighlight.dispose()
+    this.movementLine.geometry.dispose()
+    this.movementLine.material.dispose()
     this.slicer?.dispose()
     this.resizeObserver.disconnect()
     this.controls.removeEventListener('change', this.render)
