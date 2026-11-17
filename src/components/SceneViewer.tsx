@@ -47,7 +47,7 @@ export default function SceneViewer({ models, view, colourScale, mode, slicePosi
   }, [models, mode, slicePosition])
 
   useEffect(() => {
-    viewerRef.current?.setHoverBlocks(mode === 'inspect' ? sectionBlocks : [])
+    viewerRef.current?.setSection(mode === 'inspect' ? sectionBlocks : [])
   }, [models, mode, sectionBlocks])
 
   useEffect(() => {
@@ -55,11 +55,25 @@ export default function SceneViewer({ models, view, colourScale, mode, slicePosi
   }, [models, mode, sectionBlocks, selectedBlock])
 
   return (
-    <div
-      ref={containerRef}
-      className="relative h-full w-full overflow-hidden"
-      role="group"
-      aria-label={mode === 'inspect' ? '3D section inspection' : view === 'pre' ? '3D pre-blast block model' : '3D predicted post-blast block model'}
-    />
+    <>
+      <div
+        ref={containerRef}
+        className="relative h-full w-full overflow-hidden"
+        role="group"
+        aria-label={mode === 'inspect' ? '3D section inspection' : view === 'pre' ? '3D pre-blast block model' : '3D predicted post-blast block model'}
+      />
+      {mode === 'inspect' && (
+        <button
+          type="button"
+          onClick={() => {
+            if (selectedBlock) onSelectBlock(null)
+            else viewerRef.current?.frameSection()
+          }}
+          className="absolute top-6 right-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300"
+        >
+          Reset view
+        </button>
+      )}
+    </>
   )
 }

@@ -31,6 +31,8 @@ import type { Block, BlockModels, ModelView } from '../data/blockModels'
 
 export type ViewerMode = 'model' | 'slice' | 'inspect'
 
+const inspectionPadding = { top: 80, bottom: 224, sides: 24 }
+
 export class Viewer {
   private readonly scene = new Scene()
   private readonly camera = new PerspectiveCamera(45, 1, 0.1, 100)
@@ -147,7 +149,6 @@ export class Viewer {
       this.setSlicePosition(position)
       if (this.slicer.position.z !== previousZ) this.onSliceChange(position)
     }
-    if (this.savedCamera) this.frameSection()
     this.render()
   }
 
@@ -170,15 +171,12 @@ export class Viewer {
     this.sidebarWidth = inspecting ? sidebarWidth : 0
     this.resize()
 
-    if (inspecting) {
-      if (!this.savedCamera) {
-        this.savedCamera = {
-          position: this.camera.position.clone(),
-          target: this.controls.target.clone(),
-        }
+    if (inspecting && !this.savedCamera) {
+      this.savedCamera = {
+        position: this.camera.position.clone(),
+        target: this.controls.target.clone(),
       }
-      this.frameSection()
-    } else if (this.savedCamera) {
+    } else if (!inspecting && this.savedCamera) {
       this.cameraMove = null
       this.camera.position.copy(this.savedCamera.position)
       this.controls.target.copy(this.savedCamera.target)
@@ -205,13 +203,11 @@ export class Viewer {
     this.render()
   }
 
-  public setHoverBlocks(blocks: readonly Block[]): void {
+  public setSection(blocks: readonly Block[]): void {
     this.clearHover()
     this.sectionBlocks = blocks
-    this.sectionBoxes = blocks.map((block) => new Box3().setFromCenterAndSize(
-      new Vector3(block.x - this.origin.x, block.z - this.origin.z, this.origin.y - block.y),
-      new Vector3(block.width, block.height, block.depth),
-    ))
+    this.sectionBoxes = blocks.map((block) => this.blockBounds(block))
+    if (this.savedCamera && !this.selectionHighlight.visible) this.frameSection()
   }
 
   public setSelectedBlock(block: Block | null): void {
@@ -225,44 +221,92 @@ export class Viewer {
       const otherView = this.currentView === 'pre' ? 'post' : 'pre'
       const other = this.models[otherView].find((candidate) => candidate.id === block.id)
       if (other) {
+        const otherBounds = this.blockBounds(other)
         const start = this.sectionBoxes[index].getCenter(new Vector3())
-        const end = new Vector3(other.x - this.origin.x, other.z - this.origin.z, this.origin.y - other.y)
+        const end = otherBounds.getCenter(new Vector3())
         if (!start.equals(end)) {
-          this.otherPositionHighlight.box.setFromCenterAndSize(end, new Vector3(other.width, other.height, other.depth))
+          this.otherPositionHighlight.box.copy(otherBounds)
           this.otherPositionMaterial.color.setHex(otherView === 'pre' ? 0xa5f3fc : 0xc4b5fd)
           this.otherPositionHighlight.visible = true
           this.movementLine.geometry.setFromPoints([start, end])
           this.movementLine.visible = true
         }
       }
-      const bounds = this.selectionHighlight.box.clone()
-      if (this.otherPositionHighlight.visible) bounds.union(this.otherPositionHighlight.box)
-      this.frameBounds(bounds, true)
+      this.frameBlocks(other ? [block, other] : [block])
     } else if (wasSelected && this.savedCamera) {
       this.frameSection()
     }
     this.render()
   }
 
-  private frameBounds(bounds: Box3, animate = false): void {
-    const { clientWidth: width, clientHeight: height } = this.container
-    if (!width || !height) return
-    const availableWidth = width - Math.min(this.sidebarWidth, width * 0.45)
+  private blockBounds(block: Block): Box3 {
+    return new Box3().setFromCenterAndSize(
+      new Vector3(block.x - this.origin.x, block.z - this.origin.z, this.origin.y - block.y),
+      new Vector3(block.width, block.height, block.depth),
+    )
+  }
+
+  private frameBounds(bounds: Box3): void {
     const centre = bounds.getCenter(new Vector3())
     const radius = Math.max(bounds.getSize(new Vector3()).length() / 2, 1)
     const verticalFov = MathUtils.degToRad(this.camera.fov)
-    const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * availableWidth / height)
+    const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * this.camera.aspect)
     const distance = radius / Math.sin(Math.min(verticalFov, horizontalFov) / 2) * 1.1
-    const position = centre.clone().addScaledVector(new Vector3(1, 0.9, 1.3).normalize(), distance)
+    this.camera.position.copy(centre).addScaledVector(new Vector3(1, 0.9, 1.3).normalize(), distance)
     this.camera.near = Math.min(this.camera.near, Math.max(radius / 1000, 0.01))
     this.camera.far = Math.max(this.camera.far, distance * 10 + radius)
     this.camera.updateProjectionMatrix()
-    if (animate) this.flyTo(position, centre)
-    else {
-      this.camera.position.copy(position)
-      this.controls.target.copy(centre)
-      this.controls.update()
+    this.controls.target.copy(centre)
+    this.controls.update()
+  }
+
+  private frameBlocks(blocks: readonly Block[]): void {
+    const { clientWidth: width, clientHeight: height } = this.container
+    if (!blocks.length || !width || !height) return
+    const boxes = blocks.map((block) => this.blockBounds(block))
+    const bounds = new Box3()
+    for (const box of boxes) bounds.union(box)
+    const centre = bounds.getCenter(new Vector3())
+    const radius = Math.max(bounds.getSize(new Vector3()).length() / 2, 1)
+    const availableWidth = Math.max(width - Math.min(this.sidebarWidth, width * 0.45) - inspectionPadding.sides * 2, 1)
+    const availableHeight = Math.max(height - inspectionPadding.top - inspectionPadding.bottom, 1)
+    const tanHalfFov = Math.tan(MathUtils.degToRad(this.camera.fov) / 2)
+    const horizontalLimit = tanHalfFov * availableWidth / height / 1.04
+    const verticalLimit = tanHalfFov * availableHeight / height / 1.04
+    const direction = new Vector3(1, 0.8, 1.3).normalize()
+    const right = new Vector3().crossVectors(this.camera.up, direction).normalize()
+    const up = new Vector3().crossVectors(direction, right)
+    const corner = new Vector3()
+    let minX = Infinity
+    let maxX = -Infinity
+    let minY = Infinity
+    let maxY = -Infinity
+
+    for (const box of boxes) {
+      for (const x of [box.min.x, box.max.x]) {
+        for (const y of [box.min.y, box.max.y]) {
+          for (const z of [box.min.z, box.max.z]) {
+            corner.set(x, y, z).sub(centre)
+            const horizontal = corner.dot(right)
+            const vertical = corner.dot(up)
+            const depth = corner.dot(direction)
+            // Nearer corners appear larger in perspective.
+            minX = Math.min(minX, horizontal - depth * horizontalLimit)
+            maxX = Math.max(maxX, horizontal + depth * horizontalLimit)
+            minY = Math.min(minY, vertical - depth * verticalLimit)
+            maxY = Math.max(maxY, vertical + depth * verticalLimit)
+          }
+        }
+      }
     }
+
+    const minDistance = this.selectionHighlight.visible ? 25 : 5
+    const distance = Math.max((maxX - minX) / (2 * horizontalLimit), (maxY - minY) / (2 * verticalLimit), minDistance)
+    centre.addScaledVector(right, (minX + maxX) / 2).addScaledVector(up, (minY + maxY) / 2)
+    this.camera.near = Math.min(this.camera.near, Math.max(radius / 1000, 0.01))
+    this.camera.far = Math.max(this.camera.far, distance * 10 + radius)
+    this.camera.updateProjectionMatrix()
+    this.flyTo(centre.clone().addScaledVector(direction, distance), centre)
   }
 
   private flyTo(position: Vector3, target: Vector3): void {
@@ -377,20 +421,15 @@ export class Viewer {
     return nearest
   }
 
-  private frameSection(): void {
-    const bounds = this.mesh.boundingBox
-    const width = this.container.clientWidth
-    const height = this.container.clientHeight
-    if (!bounds || !this.slicer || !width || !height) return
-
-    const centre = bounds.getCenter(new Vector3())
-    centre.z = this.slicer.position.z
-    const size = bounds.getSize(new Vector3())
-    const availableWidth = width - Math.min(this.sidebarWidth, width * 0.45)
-    const halfFov = MathUtils.degToRad(this.camera.fov) / 2
-    const distance = Math.max(size.x / (availableWidth / height), size.y, 1) / (2 * Math.tan(halfFov)) * 1.15
-
-    this.flyTo(centre.clone().addScaledVector(new Vector3(0, 0.22, 1).normalize(), distance), centre)
+  public frameSection(): void {
+    if (!this.sectionBlocks.length) return
+    const ids = new Set(this.sectionBlocks.map((block) => block.id))
+    const positions: Block[] = []
+    this.models.pre.forEach((block, index) => {
+      // Pre and post arrays contain matching blocks in the same order.
+      if (ids.has(block.id)) positions.push(this.models.pre[index], this.models.post[index])
+    })
+    this.frameBlocks(positions)
   }
 
   private readonly resize = (): void => {
@@ -399,7 +438,9 @@ export class Viewer {
     if (width === 0 || height === 0) return
     this.camera.aspect = width / height
     const sidebarWidth = Math.min(this.sidebarWidth, width * 0.45)
-    if (sidebarWidth) this.camera.setViewOffset(width, height, -sidebarWidth / 2, 0, width, height)
+    const rightOffset = this.inspectActive.value ? Math.max(width - sidebarWidth - inspectionPadding.sides * 2, 1) * 0.015 : 0
+    const verticalOffset = this.inspectActive.value ? (inspectionPadding.bottom - inspectionPadding.top) / 2 : 0
+    if (sidebarWidth) this.camera.setViewOffset(width, height, -sidebarWidth / 2 - rightOffset, verticalOffset, width, height)
     else this.camera.clearViewOffset()
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(width, height)
