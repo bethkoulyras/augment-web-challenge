@@ -68,7 +68,7 @@ export default function App() {
           <div className={"absolute top-20 left-6 z-10 flex max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)] " + (mode === 'model' ? "w-72" : "w-80")}>
             <ColourPalette scale={colourScale} onChange={setColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} />
             {mode !== 'model' && slicePosition !== null && <CrossSectionPanel blocks={sectionBlocks} scale={colourScale} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
-            {mode === 'inspect' && <BlockInspector block={selectedBlock} field={colourField} onClear={() => setSelectedBlock(null)} />}
+            {mode === 'inspect' && <BlockInspector block={selectedBlock} models={models} field={colourField} onClear={() => setSelectedBlock(null)} />}
           </div>
           {mode === 'inspect' && slicePosition !== null && (
             <SectionSlider blocks={models[view]} position={slicePosition} onChange={(position) => { setSlicePosition(position); setSelectedBlock(null) }} />

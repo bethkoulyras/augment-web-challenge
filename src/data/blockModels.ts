@@ -16,6 +16,7 @@ export interface Block {
   width: number
   depth: number
   height: number
+  movementDistance: number
   attributes: Record<ColourField, number | null>
 }
 
@@ -41,6 +42,7 @@ export function createBlockModels(rows: CsvRow[]): BlockModels {
       width: Number(row.Xinc),
       depth: Number(row.Yinc),
       height: Number(row.Zinc),
+      movementDistance: Number(row.DISP_A),
       attributes,
     }
     models.pre.push(block)
