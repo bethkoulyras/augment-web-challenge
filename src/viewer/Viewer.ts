@@ -10,14 +10,18 @@ import {
   Matrix4,
   MeshLambertMaterial,
   PerspectiveCamera,
+  Plane,
   Raycaster,
   Scene,
+  Uniform,
   Vector2,
   Vector3,
   WebGLRenderer,
 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { SlicePlane } from './SlicePlane'
+import sliceVertexShader from './shaders/slice.vert.glsl?raw'
+import sliceFragmentShader from './shaders/slice.frag.glsl?raw'
 import { colourForValue } from '../data/blockColours'
 import type { ColourScale } from '../data/blockColours'
 import type { Block, BlockModels, ModelView } from '../data/blockModels'
@@ -25,15 +29,14 @@ import type { Block, BlockModels, ModelView } from '../data/blockModels'
 export type ViewerMode = 'model' | 'slice' | 'inspect'
 
 export class Viewer {
-  private readonly container: HTMLElement
-  private readonly models: BlockModels
   private readonly scene = new Scene()
   private readonly camera = new PerspectiveCamera(45, 1, 0.1, 100)
-  private readonly geometry = new BoxGeometry(1, 1, 1)
   private readonly material = new MeshLambertMaterial({ color: 0xffffff })
+  private readonly sliceZ = new Uniform(0)
+  private readonly sliceActive = new Uniform(false)
+  private readonly clippingPlane = new Plane(new Vector3(0, 0, -1), 0)
   private readonly mesh: InstancedMesh
   private readonly origin = new Vector3()
-  private readonly bounds = new Box3()
   private readonly renderer: WebGLRenderer
   private readonly controls: OrbitControls
   private readonly resizeObserver: ResizeObserver
@@ -42,15 +45,18 @@ export class Viewer {
   private readonly pointer = new Vector2()
   private readonly hit = new Vector3()
   private sectionBoxes: Box3[] = []
+  private currentView: ModelView | null = null
   private slicer: SlicePlane | null = null
   private savedCamera: { position: Vector3; target: Vector3 } | null = null
   private sidebarWidth = 0
   private renderFrame: number | null = null
   private disposed = false
 
-  constructor(container: HTMLElement, models: BlockModels, onSliceChange: (y: number) => void) {
-    this.container = container
-    this.models = models
+  constructor(
+    private readonly container: HTMLElement,
+    private readonly models: BlockModels,
+    private readonly onSliceChange: (position: number) => void,
+  ) {
     const first = models.pre[0]
     if (first) this.origin.set(first.x, first.y, first.z)
 
@@ -64,33 +70,32 @@ export class Viewer {
     this.renderer.domElement.addEventListener('pointermove', this.pointerMove)
     this.renderer.domElement.addEventListener('pointerleave', this.clearHover)
 
-    this.mesh = new InstancedMesh(this.geometry, this.material, models.pre.length)
+    this.configureBlockHighlight()
+    this.mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), this.material, models.pre.length)
     const light = new DirectionalLight(0xffffff, 1.8)
     light.position.set(1, 3, 2)
     this.hoverHighlight.visible = false
     this.scene.add(this.mesh, this.hoverHighlight, new AmbientLight(0xffffff, 0.8), light)
 
     this.setView('pre')
-    this.bounds.setFromObject(this.mesh)
+    const bounds = this.mesh.boundingBox!
 
     this.resizeObserver = new ResizeObserver(this.resize)
     this.resizeObserver.observe(container)
     this.resize()
-    this.resetCamera()
-    this.slicer = new SlicePlane({
-      canvas: this.renderer.domElement,
-      camera: this.camera,
-      controls: this.controls,
-      scene: this.scene,
-      material: this.material,
-      bounds: this.bounds,
-      step: models.pre[0]?.depth ?? 1,
-      render: this.render,
-      onChange: (position) => onSliceChange(this.origin.y - position),
+    this.frameModel(bounds)
+    this.slicer = new SlicePlane(bounds, first?.depth ?? 1, this.controls, (sceneZ) => {
+      this.setSlicePosition(this.origin.y - sceneZ)
+      this.onSliceChange(this.origin.y - this.slicer!.position.z)
     })
+    this.scene.add(this.slicer)
+    const initialPosition = this.origin.y - this.slicer.position.z
+    this.setSlicePosition(initialPosition)
+    this.onSliceChange(initialPosition)
   }
 
   public setView(view: ModelView): void {
+    if (view === this.currentView) return
     const matrix = new Matrix4()
     this.models[view].forEach((block, index) => {
       matrix.makeScale(block.width, block.height, block.depth)
@@ -101,27 +106,33 @@ export class Viewer {
     this.mesh.instanceMatrix.needsUpdate = true
     this.mesh.computeBoundingBox()
     this.mesh.computeBoundingSphere()
-    if (this.mesh.boundingBox) this.slicer?.setBounds(this.mesh.boundingBox)
+    this.currentView = view
+    if (this.slicer && this.mesh.boundingBox) {
+      const previousZ = this.slicer.position.z
+      this.slicer.setBounds(this.mesh.boundingBox)
+      const position = this.origin.y - this.slicer.position.z
+      this.setSlicePosition(position)
+      if (this.slicer.position.z !== previousZ) this.onSliceChange(position)
+    }
     if (this.savedCamera) this.frameSection()
     this.render()
   }
 
   public setColourScale(scale: ColourScale): void {
-    const firstUpdate = this.mesh.instanceColor === null
     const colour = new Color()
     this.models.pre.forEach((block, index) => {
       colour.setHex(colourForValue(scale, block.attributes[scale.field]))
       this.mesh.setColorAt(index, colour)
     })
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
-    if (firstUpdate) this.material.needsUpdate = true
     this.render()
   }
 
   public setMode(mode: ViewerMode, sidebarWidth = 0): void {
     const inspecting = mode === 'inspect'
     this.slicer?.setEnabled(mode === 'slice')
-    this.slicer?.setClippingEnabled(inspecting)
+    this.sliceActive.value = mode === 'slice'
+    this.material.clippingPlanes = inspecting ? [this.clippingPlane] : []
     this.sidebarWidth = inspecting ? sidebarWidth : 0
     this.resize()
 
@@ -139,23 +150,26 @@ export class Viewer {
       this.savedCamera = null
       this.controls.update()
     }
-    this.render()
   }
 
-  public setSlicePosition(y: number): void {
+  public setSlicePosition(position: number): void {
     if (!this.slicer) return
-    const previous = this.slicer.getPosition()
-    this.slicer.moveTo(this.origin.y - y)
+    const previousZ = this.sliceZ.value
+    this.slicer.moveTo(this.origin.y - position)
+    const sceneZ = this.slicer.position.z
+    this.sliceZ.value = sceneZ
+    this.clippingPlane.constant = sceneZ + this.slicer.step / 2 + 0.001
 
     if (this.savedCamera) {
-      const offset = this.slicer.getPosition() - previous
+      const offset = sceneZ - previousZ
       this.camera.position.z += offset
       this.controls.target.z += offset
       this.controls.update()
     }
+    this.render()
   }
 
-  public setSectionBlocks(blocks: readonly Block[]): void {
+  public setHoverBlocks(blocks: readonly Block[]): void {
     this.clearHover()
     this.sectionBoxes = blocks.map((block) => new Box3().setFromCenterAndSize(
       new Vector3(block.x - this.origin.x, block.z - this.origin.z, this.origin.y - block.y),
@@ -163,9 +177,9 @@ export class Viewer {
     ))
   }
 
-  public resetCamera(): void {
-    const centre = this.bounds.getCenter(new Vector3())
-    const radius = Math.max(this.bounds.getSize(new Vector3()).length() / 2, 1)
+  private frameModel(bounds: Box3): void {
+    const centre = bounds.getCenter(new Vector3())
+    const radius = Math.max(bounds.getSize(new Vector3()).length() / 2, 1)
     const verticalFov = MathUtils.degToRad(this.camera.fov)
     const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * this.camera.aspect)
     const distance = radius / Math.sin(Math.min(verticalFov, horizontalFov) / 2) * 1.1
@@ -190,11 +204,25 @@ export class Viewer {
     this.renderer.domElement.removeEventListener('pointerleave', this.clearHover)
     this.controls.dispose()
     this.mesh.dispose()
-    this.geometry.dispose()
+    this.mesh.geometry.dispose()
     this.material.dispose()
     this.scene.clear()
     this.renderer.dispose()
     this.renderer.domElement.remove()
+  }
+
+  private configureBlockHighlight(): void {
+    // Extend Three's Lambert shaders so lighting and instancing stay intact.
+    this.material.onBeforeCompile = (shader) => {
+      shader.uniforms.slicePosition = this.sliceZ
+      shader.uniforms.sliceActive = this.sliceActive
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', `#include <common>\n${sliceVertexShader}`)
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nupdateSliceSelection();')
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\n${sliceFragmentShader}`)
+        .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = applySliceHighlight(diffuseColor.rgb);')
+    }
   }
 
   private readonly clearHover = (): void => {
@@ -239,7 +267,7 @@ export class Viewer {
     if (!bounds || !this.slicer || !width || !height) return
 
     const centre = bounds.getCenter(new Vector3())
-    centre.z = this.slicer.getPosition()
+    centre.z = this.slicer.position.z
     const size = bounds.getSize(new Vector3())
     const availableWidth = width - Math.min(this.sidebarWidth, width * 0.45)
     const halfFov = MathUtils.degToRad(this.camera.fov) / 2

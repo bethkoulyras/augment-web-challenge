@@ -1,5 +1,4 @@
-import { useEffect, useRef } from "react";
-import { drawCrossSection } from "../viewer/drawCrossSection";
+import CrossSectionCanvas from "./CrossSectionCanvas";
 import type { ColourScale } from "../data/blockColours";
 import type { Block } from "../data/blockModels";
 
@@ -14,20 +13,6 @@ export default function CrossSectionPanel({
   scale,
   onInspect,
 }: CrossSectionPanelProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const draw = (): void => drawCrossSection(canvas, blocks, scale);
-
-    draw();
-    const observer = new ResizeObserver(draw);
-    observer.observe(canvas);
-    return () => observer.disconnect();
-  }, [blocks, scale]);
-
   return (
     <section
       aria-label="Cross-section"
@@ -35,12 +20,7 @@ export default function CrossSectionPanel({
     >
       <h2 className="text-sm font-medium text-neutral-100">Cross-section</h2>
       <div className="relative overflow-hidden rounded-lg border border-white/5 bg-neutral-950/60">
-        <canvas
-          ref={canvasRef}
-          role="img"
-          aria-label={"Cross-section coloured by " + scale.field}
-          className="h-44 w-full"
-        />
+        <CrossSectionCanvas blocks={blocks} scale={scale} />
         {!blocks.length && (
           <p className="absolute inset-0 grid place-items-center text-neutral-500">
             No blocks at this section.
