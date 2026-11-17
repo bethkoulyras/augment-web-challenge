@@ -1,5 +1,4 @@
 uniform float slicePosition;
-uniform bool sliceActive;
 
 varying float sliceSelected;
 
@@ -9,5 +8,5 @@ void updateSliceSelection() {
   float distanceToSlice = abs(blockCentre - slicePosition);
   bool intersectsSlice = distanceToSlice <= blockHalfDepth + 0.001;
 
-  sliceSelected = sliceActive && intersectsSlice ? 1.0 : 0.0;
+  sliceSelected = intersectsSlice ? 1.0 : 0.0;
 }

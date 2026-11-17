@@ -37,6 +37,7 @@ export class Viewer {
   private readonly material = new MeshLambertMaterial({ color: 0xffffff })
   private readonly sliceZ = new Uniform(0)
   private readonly sliceActive = new Uniform(false)
+  private readonly inspectActive = new Uniform(false)
   private readonly clippingPlane = new Plane(new Vector3(0, 0, -1), 0)
   private readonly mesh: InstancedMesh
   private readonly origin = new Vector3()
@@ -156,6 +157,7 @@ export class Viewer {
     const inspecting = mode === 'inspect'
     this.slicer?.setEnabled(mode === 'slice')
     this.sliceActive.value = mode === 'slice'
+    this.inspectActive.value = inspecting
     this.material.clippingPlanes = inspecting ? [this.clippingPlane] : []
     this.sidebarWidth = inspecting ? sidebarWidth : 0
     this.resize()
@@ -280,6 +282,7 @@ export class Viewer {
     this.material.onBeforeCompile = (shader) => {
       shader.uniforms.slicePosition = this.sliceZ
       shader.uniforms.sliceActive = this.sliceActive
+      shader.uniforms.inspectActive = this.inspectActive
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>\n${sliceVertexShader}`)
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nupdateSliceSelection();')
