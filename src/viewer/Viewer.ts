@@ -62,6 +62,13 @@ export class Viewer {
   private slicer: SlicePlane | null = null
   private savedCamera: { position: Vector3; target: Vector3 } | null = null
   private sidebarWidth = 0
+  private cameraMove: {
+    fromPosition: Vector3
+    toPosition: Vector3
+    fromTarget: Vector3
+    toTarget: Vector3
+    startedAt: number
+  } | null = null
   private renderFrame: number | null = null
   private disposed = false
 
@@ -81,6 +88,7 @@ export class Viewer {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.addEventListener('change', this.render)
     this.controls.addEventListener('change', this.clearHover)
+    this.controls.addEventListener('start', this.cancelCameraMove)
     this.renderer.domElement.addEventListener('pointerdown', this.pointerDown)
     this.renderer.domElement.addEventListener('click', this.clickBlock)
     this.renderer.domElement.addEventListener('pointermove', this.pointerMove)
@@ -171,6 +179,7 @@ export class Viewer {
       }
       this.frameSection()
     } else if (this.savedCamera) {
+      this.cameraMove = null
       this.camera.position.copy(this.savedCamera.position)
       this.controls.target.copy(this.savedCamera.target)
       this.savedCamera = null
@@ -188,6 +197,7 @@ export class Viewer {
 
     if (this.savedCamera) {
       const offset = sceneZ - previousZ
+      if (offset !== 0) this.cameraMove = null
       this.camera.position.z += offset
       this.controls.target.z += offset
       this.controls.update()
@@ -227,14 +237,14 @@ export class Viewer {
       }
       const bounds = this.selectionHighlight.box.clone()
       if (this.otherPositionHighlight.visible) bounds.union(this.otherPositionHighlight.box)
-      this.frameBounds(bounds)
+      this.frameBounds(bounds, true)
     } else if (wasSelected && this.savedCamera) {
       this.frameSection()
     }
     this.render()
   }
 
-  private frameBounds(bounds: Box3): void {
+  private frameBounds(bounds: Box3, animate = false): void {
     const { clientWidth: width, clientHeight: height } = this.container
     if (!width || !height) return
     const availableWidth = width - Math.min(this.sidebarWidth, width * 0.45)
@@ -243,12 +253,39 @@ export class Viewer {
     const verticalFov = MathUtils.degToRad(this.camera.fov)
     const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * availableWidth / height)
     const distance = radius / Math.sin(Math.min(verticalFov, horizontalFov) / 2) * 1.1
-    this.camera.position.copy(centre).addScaledVector(new Vector3(1, 0.9, 1.3).normalize(), distance)
+    const position = centre.clone().addScaledVector(new Vector3(1, 0.9, 1.3).normalize(), distance)
     this.camera.near = Math.min(this.camera.near, Math.max(radius / 1000, 0.01))
     this.camera.far = Math.max(this.camera.far, distance * 10 + radius)
     this.camera.updateProjectionMatrix()
-    this.controls.target.copy(centre)
-    this.controls.update()
+    if (animate) this.flyTo(position, centre)
+    else {
+      this.camera.position.copy(position)
+      this.controls.target.copy(centre)
+      this.controls.update()
+    }
+  }
+
+  private flyTo(position: Vector3, target: Vector3): void {
+    this.clearHover()
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      this.cameraMove = null
+      this.camera.position.copy(position)
+      this.controls.target.copy(target)
+      this.controls.update()
+      return
+    }
+    this.cameraMove = {
+      fromPosition: this.camera.position.clone(),
+      toPosition: position.clone(),
+      fromTarget: this.controls.target.clone(),
+      toTarget: target.clone(),
+      startedAt: performance.now(),
+    }
+    this.render()
+  }
+
+  private readonly cancelCameraMove = (): void => {
+    this.cameraMove = null
   }
 
   public dispose(): void {
@@ -264,6 +301,7 @@ export class Viewer {
     this.resizeObserver.disconnect()
     this.controls.removeEventListener('change', this.render)
     this.controls.removeEventListener('change', this.clearHover)
+    this.controls.removeEventListener('start', this.cancelCameraMove)
     this.renderer.domElement.removeEventListener('pointerdown', this.pointerDown)
     this.renderer.domElement.removeEventListener('click', this.clickBlock)
     this.renderer.domElement.removeEventListener('pointermove', this.pointerMove)
@@ -303,7 +341,7 @@ export class Viewer {
   }
 
   private readonly clickBlock = (event: MouseEvent): void => {
-    if (!this.sectionBlocks.length || event.button !== 0) return
+    if (this.cameraMove || !this.sectionBlocks.length || event.button !== 0) return
     const distance = Math.hypot(event.clientX - this.pointerDownPosition.x, event.clientY - this.pointerDownPosition.y)
     if (distance > 4) return
     const index = this.pick(event)
@@ -311,7 +349,7 @@ export class Viewer {
   }
 
   private readonly pointerMove = (event: PointerEvent): void => {
-    if (!this.sectionBoxes.length) return
+    if (this.cameraMove || !this.sectionBoxes.length) return
     if (event.buttons) return this.clearHover()
     const index = this.pick(event)
     if (index === null) return this.clearHover()
@@ -352,9 +390,7 @@ export class Viewer {
     const halfFov = MathUtils.degToRad(this.camera.fov) / 2
     const distance = Math.max(size.x / (availableWidth / height), size.y, 1) / (2 * Math.tan(halfFov)) * 1.15
 
-    this.camera.position.copy(centre).addScaledVector(new Vector3(0, 0.22, 1).normalize(), distance)
-    this.controls.target.copy(centre)
-    this.controls.update()
+    this.flyTo(centre.clone().addScaledVector(new Vector3(0, 0.22, 1).normalize(), distance), centre)
   }
 
   private readonly resize = (): void => {
@@ -373,10 +409,20 @@ export class Viewer {
 
   private readonly render = (): void => {
     if (this.disposed || this.renderFrame !== null) return
-    this.renderFrame = requestAnimationFrame(() => {
+    this.renderFrame = requestAnimationFrame((time) => {
       this.renderFrame = null
       if (this.disposed) return
+      const move = this.cameraMove
+      if (move) {
+        const progress = Math.min((time - move.startedAt) / 650, 1)
+        const eased = progress * progress * (3 - 2 * progress)
+        this.camera.position.lerpVectors(move.fromPosition, move.toPosition, eased)
+        this.controls.target.lerpVectors(move.fromTarget, move.toTarget, eased)
+        this.controls.update()
+        if (progress === 1) this.cameraMove = null
+      }
       this.renderer.render(this.scene, this.camera)
+      if (this.cameraMove) this.render()
     })
   }
 }
