@@ -107,7 +107,7 @@ export class Viewer {
     this.resizeObserver = new ResizeObserver(this.resize)
     this.resizeObserver.observe(container)
     this.resize()
-    this.frameModel(bounds)
+    this.frameBounds(bounds)
     this.slicer = new SlicePlane(bounds, first?.depth ?? 1, this.controls, (sceneZ) => {
       this.setSlicePosition(this.origin.y - sceneZ)
       this.onSliceChange(this.origin.y - this.slicer!.position.z)
@@ -203,6 +203,7 @@ export class Viewer {
   }
 
   public setSelectedBlock(block: Block | null): void {
+    const wasSelected = this.selectionHighlight.visible
     const index = block === null ? -1 : this.sectionBlocks.indexOf(block)
     this.selectionHighlight.visible = index !== -1
     this.otherPositionHighlight.visible = false
@@ -222,19 +223,27 @@ export class Viewer {
           this.movementLine.visible = true
         }
       }
+      const bounds = this.selectionHighlight.box.clone()
+      if (this.otherPositionHighlight.visible) bounds.union(this.otherPositionHighlight.box)
+      this.frameBounds(bounds)
+    } else if (wasSelected && this.savedCamera) {
+      this.frameSection()
     }
     this.render()
   }
 
-  private frameModel(bounds: Box3): void {
+  private frameBounds(bounds: Box3): void {
+    const { clientWidth: width, clientHeight: height } = this.container
+    if (!width || !height) return
+    const availableWidth = width - Math.min(this.sidebarWidth, width * 0.45)
     const centre = bounds.getCenter(new Vector3())
     const radius = Math.max(bounds.getSize(new Vector3()).length() / 2, 1)
     const verticalFov = MathUtils.degToRad(this.camera.fov)
-    const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * this.camera.aspect)
+    const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * availableWidth / height)
     const distance = radius / Math.sin(Math.min(verticalFov, horizontalFov) / 2) * 1.1
     this.camera.position.copy(centre).addScaledVector(new Vector3(1, 0.9, 1.3).normalize(), distance)
-    this.camera.near = Math.max(radius / 1000, 0.01)
-    this.camera.far = distance * 10 + radius
+    this.camera.near = Math.min(this.camera.near, Math.max(radius / 1000, 0.01))
+    this.camera.far = Math.max(this.camera.far, distance * 10 + radius)
     this.camera.updateProjectionMatrix()
     this.controls.target.copy(centre)
     this.controls.update()
