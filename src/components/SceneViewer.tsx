@@ -10,11 +10,13 @@ interface SceneViewerProps {
   colourScale: ColourScale
   mode: ViewerMode
   slicePosition: number | null
+  selectedBlock: Block | null
+  onSelectBlock: (block: Block | null) => void
   sectionBlocks: readonly Block[]
   onSliceChange: (position: number) => void
 }
 
-export default function SceneViewer({ models, view, colourScale, mode, slicePosition, sectionBlocks, onSliceChange }: SceneViewerProps) {
+export default function SceneViewer({ models, view, colourScale, mode, slicePosition, sectionBlocks, selectedBlock, onSelectBlock, onSliceChange }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
 
@@ -22,13 +24,13 @@ export default function SceneViewer({ models, view, colourScale, mode, slicePosi
     const container = containerRef.current
     if (!container) return
 
-    const viewer = new Viewer(container, models, onSliceChange)
+    const viewer = new Viewer(container, models, onSliceChange, onSelectBlock)
     viewerRef.current = viewer
     return () => {
       viewerRef.current = null
       viewer.dispose()
     }
-  }, [models, onSliceChange])
+  }, [models, onSliceChange, onSelectBlock])
 
   useEffect(() => viewerRef.current?.setView(view), [models, view])
 
@@ -47,6 +49,10 @@ export default function SceneViewer({ models, view, colourScale, mode, slicePosi
   useEffect(() => {
     viewerRef.current?.setHoverBlocks(mode === 'inspect' ? sectionBlocks : [])
   }, [models, mode, sectionBlocks])
+
+  useEffect(() => {
+    viewerRef.current?.setSelectedBlock(mode === 'inspect' ? selectedBlock : null)
+  }, [models, mode, sectionBlocks, selectedBlock])
 
   return (
     <div

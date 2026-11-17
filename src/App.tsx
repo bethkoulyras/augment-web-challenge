@@ -3,10 +3,11 @@ import SceneViewer from './components/SceneViewer'
 import ColourPalette from './components/ColourPalette'
 import CrossSectionPanel from './components/CrossSectionPanel'
 import SectionSlider from './components/SectionSlider'
+import BlockInspector from './components/BlockInspector'
 import { createColourScale } from './data/blockColours'
 import { csvFiles } from './data/csvFiles'
 import { createBlockModels } from './data/blockModels'
-import type { ColourField, ModelView } from './data/blockModels'
+import type { Block, ColourField, ModelView } from './data/blockModels'
 import type { ViewerMode } from './viewer/Viewer'
 import { loadCsv } from './utils/loadCsv'
 import type { CsvRow } from './utils/loadCsv'
@@ -15,6 +16,7 @@ export default function App() {
   const [data, setData] = useState<Record<string, CsvRow[]>>({})
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<ModelView>('pre')
+  const [selectedBlock, setSelectedBlock] = useState<Block | null>(null)
   const [mode, setMode] = useState<ViewerMode>('model')
   const [slicePosition, setSlicePosition] = useState<number | null>(null)
   const [paletteCollapsed, setPaletteCollapsed] = useState(false)
@@ -55,24 +57,26 @@ export default function App() {
     const enabled = mode === 'model'
     setMode(enabled ? 'slice' : 'model')
     setPaletteCollapsed(enabled)
+    setSelectedBlock(null)
   }
 
   return (
     <main className="relative h-full w-full">
       {!isLoading && models && colourScale && (
         <>
-          <SceneViewer models={models} view={view} colourScale={colourScale} mode={mode} slicePosition={slicePosition} sectionBlocks={sectionBlocks} onSliceChange={setSlicePosition} />
+          <SceneViewer models={models} view={view} colourScale={colourScale} mode={mode} slicePosition={slicePosition} sectionBlocks={sectionBlocks} selectedBlock={selectedBlock} onSelectBlock={setSelectedBlock} onSliceChange={setSlicePosition} />
           <div className={"absolute top-20 left-6 z-10 flex max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)] " + (mode === 'model' ? "w-72" : "w-80")}>
             <ColourPalette scale={colourScale} onChange={setColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} />
             {mode !== 'model' && slicePosition !== null && <CrossSectionPanel blocks={sectionBlocks} scale={colourScale} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
+            {mode === 'inspect' && <BlockInspector block={selectedBlock} field={colourField} onClear={() => setSelectedBlock(null)} />}
           </div>
           {mode === 'inspect' && slicePosition !== null && (
-            <SectionSlider blocks={models[view]} position={slicePosition} onChange={setSlicePosition} />
+            <SectionSlider blocks={models[view]} position={slicePosition} onChange={(position) => { setSlicePosition(position); setSelectedBlock(null) }} />
           )}
           <button
             type="button"
             aria-pressed={mode === 'inspect' ? undefined : mode === 'slice'}
-            onClick={mode === 'inspect' ? () => setMode('slice') : toggleSlicing}
+            onClick={mode === 'inspect' ? () => { setMode('slice'); setSelectedBlock(null) } : toggleSlicing}
             className={"absolute top-6 left-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:border-neutral-500 aria-pressed:bg-neutral-800 aria-pressed:text-neutral-100 " + (mode === 'model' ? "sm:left-84" : "sm:left-92")}
           >
             {mode === 'inspect' ? 'Back to slice' : 'Slice model'}
@@ -81,8 +85,8 @@ export default function App() {
       )}
       {!isLoading && models && (
         <div role="group" aria-label="Block model view" className="absolute bottom-8 left-1/2 flex max-w-[calc(100%_-_2rem)] -translate-x-1/2 gap-2 whitespace-nowrap rounded border border-neutral-700 bg-neutral-900/90 p-2 text-sm">
-          <button type="button" aria-pressed={view === 'pre'} onClick={() => setView('pre')} className="cursor-pointer rounded px-3 py-2 text-neutral-400 hover:text-white aria-pressed:bg-neutral-700 aria-pressed:text-white">Pre-blast</button>
-          <button type="button" aria-pressed={view === 'post'} onClick={() => setView('post')} className="cursor-pointer rounded px-3 py-2 text-neutral-400 hover:text-white aria-pressed:bg-neutral-700 aria-pressed:text-white">Predicted post-blast</button>
+          <button type="button" aria-pressed={view === 'pre'} onClick={() => { setView('pre'); setSelectedBlock(null) }} className="cursor-pointer rounded px-3 py-2 text-neutral-400 hover:text-white aria-pressed:bg-neutral-700 aria-pressed:text-white">Pre-blast</button>
+          <button type="button" aria-pressed={view === 'post'} onClick={() => { setView('post'); setSelectedBlock(null) }} className="cursor-pointer rounded px-3 py-2 text-neutral-400 hover:text-white aria-pressed:bg-neutral-700 aria-pressed:text-white">Predicted post-blast</button>
         </div>
       )}
       {error ? (

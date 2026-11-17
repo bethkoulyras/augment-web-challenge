@@ -41,9 +41,12 @@ export class Viewer {
   private readonly controls: OrbitControls
   private readonly resizeObserver: ResizeObserver
   private readonly hoverHighlight = new Box3Helper(new Box3(), 0xffffff)
+  private readonly selectionHighlight = new Box3Helper(new Box3(), 0xffffff)
+  private readonly pointerDownPosition = new Vector2()
   private readonly raycaster = new Raycaster()
   private readonly pointer = new Vector2()
   private readonly hit = new Vector3()
+  private sectionBlocks: readonly Block[] = []
   private sectionBoxes: Box3[] = []
   private currentView: ModelView | null = null
   private slicer: SlicePlane | null = null
@@ -56,6 +59,7 @@ export class Viewer {
     private readonly container: HTMLElement,
     private readonly models: BlockModels,
     private readonly onSliceChange: (position: number) => void,
+    private readonly onSelectBlock: (block: Block | null) => void,
   ) {
     const first = models.pre[0]
     if (first) this.origin.set(first.x, first.y, first.z)
@@ -67,6 +71,8 @@ export class Viewer {
     this.controls = new OrbitControls(this.camera, this.renderer.domElement)
     this.controls.addEventListener('change', this.render)
     this.controls.addEventListener('change', this.clearHover)
+    this.renderer.domElement.addEventListener('pointerdown', this.pointerDown)
+    this.renderer.domElement.addEventListener('click', this.clickBlock)
     this.renderer.domElement.addEventListener('pointermove', this.pointerMove)
     this.renderer.domElement.addEventListener('pointerleave', this.clearHover)
 
@@ -75,7 +81,8 @@ export class Viewer {
     const light = new DirectionalLight(0xffffff, 1.8)
     light.position.set(1, 3, 2)
     this.hoverHighlight.visible = false
-    this.scene.add(this.mesh, this.hoverHighlight, new AmbientLight(0xffffff, 0.8), light)
+    this.selectionHighlight.visible = false
+    this.scene.add(this.mesh, this.hoverHighlight, this.selectionHighlight, new AmbientLight(0xffffff, 0.8), light)
 
     this.setView('pre')
     const bounds = this.mesh.boundingBox!
@@ -171,10 +178,18 @@ export class Viewer {
 
   public setHoverBlocks(blocks: readonly Block[]): void {
     this.clearHover()
+    this.sectionBlocks = blocks
     this.sectionBoxes = blocks.map((block) => new Box3().setFromCenterAndSize(
       new Vector3(block.x - this.origin.x, block.z - this.origin.z, this.origin.y - block.y),
       new Vector3(block.width, block.height, block.depth),
     ))
+  }
+
+  public setSelectedBlock(block: Block | null): void {
+    const index = block === null ? -1 : this.sectionBlocks.indexOf(block)
+    this.selectionHighlight.visible = index !== -1
+    if (index !== -1) this.selectionHighlight.box.copy(this.sectionBoxes[index]).expandByScalar(0.005)
+    this.render()
   }
 
   private frameModel(bounds: Box3): void {
@@ -196,10 +211,13 @@ export class Viewer {
     this.disposed = true
     if (this.renderFrame !== null) cancelAnimationFrame(this.renderFrame)
     this.hoverHighlight.dispose()
+    this.selectionHighlight.dispose()
     this.slicer?.dispose()
     this.resizeObserver.disconnect()
     this.controls.removeEventListener('change', this.render)
     this.controls.removeEventListener('change', this.clearHover)
+    this.renderer.domElement.removeEventListener('pointerdown', this.pointerDown)
+    this.renderer.domElement.removeEventListener('click', this.clickBlock)
     this.renderer.domElement.removeEventListener('pointermove', this.pointerMove)
     this.renderer.domElement.removeEventListener('pointerleave', this.clearHover)
     this.controls.dispose()
@@ -231,29 +249,41 @@ export class Viewer {
     this.render()
   }
 
+  private readonly pointerDown = (event: PointerEvent): void => {
+    this.pointerDownPosition.set(event.clientX, event.clientY)
+  }
+
+  private readonly clickBlock = (event: MouseEvent): void => {
+    if (!this.sectionBlocks.length || event.button !== 0) return
+    const distance = Math.hypot(event.clientX - this.pointerDownPosition.x, event.clientY - this.pointerDownPosition.y)
+    if (distance > 4) return
+    const index = this.pick(event)
+    this.onSelectBlock(index === null ? null : this.sectionBlocks[index])
+  }
+
   private readonly pointerMove = (event: PointerEvent): void => {
     if (!this.sectionBoxes.length) return
     if (event.buttons) return this.clearHover()
-    const rect = this.renderer.domElement.getBoundingClientRect()
-    if (!rect.width || !rect.height) return
-    this.pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, 1 - ((event.clientY - rect.top) / rect.height) * 2)
-    const box = this.pick()
-    if (!box) return this.clearHover()
-    this.hoverHighlight.box.copy(box).expandByScalar(0.005)
+    const index = this.pick(event)
+    if (index === null) return this.clearHover()
+    this.hoverHighlight.box.copy(this.sectionBoxes[index]).expandByScalar(0.005)
     this.hoverHighlight.visible = true
     this.render()
   }
 
-  private pick(): Box3 | null {
+  private pick(event: MouseEvent): number | null {
+    const rect = this.renderer.domElement.getBoundingClientRect()
+    if (!rect.width || !rect.height) return null
+    this.pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, 1 - ((event.clientY - rect.top) / rect.height) * 2)
     this.camera.updateMatrixWorld()
     this.raycaster.setFromCamera(this.pointer, this.camera)
-    let nearest: Box3 | null = null
+    let nearest: number | null = null
     let distance = Infinity
-    for (const box of this.sectionBoxes) {
+    for (const [index, box] of this.sectionBoxes.entries()) {
       if (!this.raycaster.ray.intersectBox(box, this.hit)) continue
       const hitDistance = this.raycaster.ray.origin.distanceToSquared(this.hit)
       if (hitDistance < distance) {
-        nearest = box
+        nearest = index
         distance = hitDistance
       }
     }
