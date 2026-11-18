@@ -49,6 +49,7 @@ export class Viewer {
   private readonly resizeObserver: ResizeObserver
   private readonly hoverHighlight = new Box3Helper(new Box3(), 0xffffff)
   private readonly selectionHighlight = new Box3Helper(new Box3(), 0xffffff)
+  private readonly originalPositionHighlight = new Box3Helper(new Box3(), 0xa3a3a3)
   private readonly otherPositionHighlight = new Box3Helper(new Box3(), 0xc4b5fd)
   private readonly otherPositionMaterial = this.otherPositionHighlight.material as LineBasicMaterial
   private readonly movementLine = new Line(
@@ -57,6 +58,7 @@ export class Viewer {
   )
   private movement: SectionMovement | null = null
   private movementProgress = 0
+  private showConnections = false
   private selectedIndex: number | null = null
   private colourScale: ColourScale | null = null
   private readonly pointerDownPosition = new Vector2()
@@ -104,6 +106,13 @@ export class Viewer {
     light.position.set(1, 3, 2)
     this.hoverHighlight.visible = false
     this.selectionHighlight.visible = false
+    this.originalPositionHighlight.visible = false
+    const originalMaterial = this.originalPositionHighlight.material as LineBasicMaterial
+    originalMaterial.transparent = true
+    originalMaterial.opacity = 0.35
+    originalMaterial.depthTest = false
+    originalMaterial.depthWrite = false
+    this.originalPositionHighlight.renderOrder = 2
     this.otherPositionHighlight.visible = false
     this.otherPositionMaterial.transparent = true
     this.otherPositionMaterial.opacity = 0.7
@@ -116,7 +125,7 @@ export class Viewer {
     selectionMaterial.depthWrite = false
     this.movementLine.visible = false
     this.movementLine.frustumCulled = false
-    this.scene.add(this.otherPositionHighlight, this.movementLine)
+    this.scene.add(this.originalPositionHighlight, this.otherPositionHighlight, this.movementLine)
     this.scene.add(this.mesh, this.hoverHighlight, this.selectionHighlight, new AmbientLight(0xffffff, 0.8), light)
 
     this.setView('pre')
@@ -250,6 +259,7 @@ export class Viewer {
       const post = this.movement.post[this.selectedIndex]
       const start = this.blockBounds(pre).getCenter(new Vector3())
       const end = this.blockBounds(post).getCenter(new Vector3())
+      this.originalPositionHighlight.box.copy(this.blockBounds(pre))
       this.otherPositionHighlight.box.copy(this.blockBounds(post))
       if (!start.equals(end)) {
         this.movementLine.geometry.setFromPoints([start, end])
@@ -272,9 +282,17 @@ export class Viewer {
     this.render()
   }
 
+  public setConnectionsVisible(show: boolean): void {
+    this.showConnections = show
+    this.updateSelection()
+    this.render()
+  }
+
   private updateSelection(): void {
     const selected = this.selectedIndex !== null && this.movement !== null
+    if (this.movement) this.movement.connections.visible = this.showConnections && !selected
     this.selectionHighlight.visible = selected
+    this.originalPositionHighlight.visible = selected && this.movementLine.visible && this.movementProgress > 0
     this.otherPositionHighlight.visible = selected && this.movementLine.visible && this.movementProgress < 1
     if (this.selectedIndex !== null && this.movement) {
       this.selectionHighlight.box.copy(this.movement.blockBounds(this.selectedIndex)).expandByScalar(0.005)
@@ -380,6 +398,7 @@ export class Viewer {
     if (this.renderFrame !== null) cancelAnimationFrame(this.renderFrame)
     this.hoverHighlight.dispose()
     this.selectionHighlight.dispose()
+    this.originalPositionHighlight.dispose()
     this.otherPositionHighlight.dispose()
     this.movementLine.geometry.dispose()
     this.movementLine.material.dispose()
@@ -451,7 +470,7 @@ export class Viewer {
     this.pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, 1 - ((event.clientY - rect.top) / rect.height) * 2)
     this.camera.updateMatrixWorld()
     this.raycaster.setFromCamera(this.pointer, this.camera)
-    return this.raycaster.intersectObject(this.movement)[0]?.instanceId ?? null
+    return this.raycaster.intersectObject(this.movement, false)[0]?.instanceId ?? null
   }
 
   public frameSection(): void {

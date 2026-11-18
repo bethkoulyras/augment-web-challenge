@@ -3,9 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 interface MovementSliderProps {
   disabled: boolean
   onChange: (progress: number) => void
+  showConnections: boolean
+  onConnectionsChange?: (show: boolean) => void
 }
 
-export default function MovementSlider({ disabled, onChange }: MovementSliderProps) {
+export default function MovementSlider({ disabled, onChange, showConnections, onConnectionsChange }: MovementSliderProps) {
   const [progress, setProgress] = useState(0)
   const [playing, setPlaying] = useState(false)
   const progressRef = useRef(0)
@@ -73,6 +75,12 @@ export default function MovementSlider({ disabled, onChange }: MovementSliderPro
           </div>
         </div>
       </div>
+      {onConnectionsChange && (
+        <label className="mt-3 ml-auto flex w-fit cursor-pointer items-center gap-2 text-neutral-400">
+          <input type="checkbox" checked={showConnections} onChange={(event) => onConnectionsChange(event.currentTarget.checked)} className="cursor-pointer accent-neutral-300" />
+          Movement connections
+        </label>
+      )}
     </section>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import MovementSlider from './MovementSlider'
 import { Viewer } from '../viewer/Viewer'
 import type { ViewerMode } from '../viewer/Viewer'
@@ -19,6 +19,7 @@ interface SceneViewerProps {
 export default function SceneViewer({ models, colourScale, mode, slicePosition, sectionBlocks, selectedBlock, onSelectBlock, onSliceChange }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
+  const [showConnections, setShowConnections] = useState(false)
 
   useEffect(() => {
     const container = containerRef.current
@@ -52,6 +53,10 @@ export default function SceneViewer({ models, colourScale, mode, slicePosition, 
     viewerRef.current?.setSelectedBlock(mode === 'inspect' ? selectedBlock : null)
   }, [models, mode, sectionBlocks, selectedBlock])
 
+  useEffect(() => {
+    viewerRef.current?.setConnectionsVisible(showConnections)
+  }, [models, showConnections])
+
   return (
     <>
       <div
@@ -61,7 +66,13 @@ export default function SceneViewer({ models, colourScale, mode, slicePosition, 
         aria-label={mode === 'inspect' ? '3D section inspection' : '3D pre-blast block model'}
       />
       {mode === 'inspect' && slicePosition !== null && (
-        <MovementSlider key={slicePosition} disabled={!sectionBlocks.some((block) => block.movementDistance > 0)} onChange={(progress) => viewerRef.current?.setMovementProgress(progress)} />
+        <MovementSlider
+          key={slicePosition}
+          disabled={!sectionBlocks.some((block) => block.movementDistance > 0)}
+          onChange={(progress) => viewerRef.current?.setMovementProgress(progress)}
+          showConnections={showConnections}
+          onConnectionsChange={selectedBlock ? undefined : setShowConnections}
+        />
       )}
       {mode === 'inspect' && (
         <button

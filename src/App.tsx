@@ -4,6 +4,7 @@ import ColourPalette from './components/ColourPalette'
 import CrossSectionPanel from './components/CrossSectionPanel'
 import SectionSlider from './components/SectionSlider'
 import BlockInspector from './components/BlockInspector'
+import SectionSummary from './components/SectionSummary'
 import { createColourScale } from './data/blockColours'
 import { csvFiles } from './data/csvFiles'
 import { createBlockModels } from './data/blockModels'
@@ -70,7 +71,9 @@ export default function App() {
             {mode === 'inspect' && slicePosition !== null && !selectedBlock && (
               <SectionSlider blocks={models.pre} position={slicePosition} onChange={(position) => { setSlicePosition(position); setSelectedBlock(null) }} />
             )}
-            {mode === 'inspect' && <BlockInspector block={selectedBlock} models={models} field={colourField} onClear={() => setSelectedBlock(null)} />}
+            {mode === 'inspect' && (selectedBlock
+              ? <BlockInspector block={selectedBlock} models={models} field={colourField} onClear={() => setSelectedBlock(null)} />
+              : <SectionSummary blocks={sectionBlocks} />)}
           </div>
           <button
             type="button"
