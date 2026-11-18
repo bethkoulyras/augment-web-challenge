@@ -19,9 +19,9 @@ export default function SectionSlider({ blocks, position, onChange }: SectionSli
   }, [blocks])
 
   return (
-    <div className="absolute right-6 bottom-28 left-6 z-10 mx-auto max-w-lg rounded-xl border border-neutral-700 bg-neutral-900/95 px-4 py-3 text-xs text-neutral-300 shadow-lg sm:left-92">
+    <div className="shrink-0 rounded-xl border border-neutral-700 bg-neutral-900/95 px-4 py-3 text-xs text-neutral-300 shadow-lg">
       <div className="mb-2 flex justify-between">
-        <label htmlFor="section-position">Northing</label>
+        <label htmlFor="section-position">Source northing</label>
         <span className="tabular-nums">{position.toFixed(1)} m</span>
       </div>
       <input

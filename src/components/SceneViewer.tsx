@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
+import MovementSlider from './MovementSlider'
 import { Viewer } from '../viewer/Viewer'
 import type { ViewerMode } from '../viewer/Viewer'
 import type { ColourScale } from '../data/blockColours'
-import type { Block, BlockModels, ModelView } from '../data/blockModels'
+import type { Block, BlockModels } from '../data/blockModels'
 
 interface SceneViewerProps {
   models: BlockModels
-  view: ModelView
   colourScale: ColourScale
   mode: ViewerMode
   slicePosition: number | null
@@ -16,7 +16,7 @@ interface SceneViewerProps {
   onSliceChange: (position: number) => void
 }
 
-export default function SceneViewer({ models, view, colourScale, mode, slicePosition, sectionBlocks, selectedBlock, onSelectBlock, onSliceChange }: SceneViewerProps) {
+export default function SceneViewer({ models, colourScale, mode, slicePosition, sectionBlocks, selectedBlock, onSelectBlock, onSliceChange }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
 
@@ -31,8 +31,6 @@ export default function SceneViewer({ models, view, colourScale, mode, slicePosi
       viewer.dispose()
     }
   }, [models, onSliceChange, onSelectBlock])
-
-  useEffect(() => viewerRef.current?.setView(view), [models, view])
 
   useEffect(() => viewerRef.current?.setColourScale(colourScale), [models, colourScale])
 
@@ -60,8 +58,11 @@ export default function SceneViewer({ models, view, colourScale, mode, slicePosi
         ref={containerRef}
         className="relative h-full w-full overflow-hidden"
         role="group"
-        aria-label={mode === 'inspect' ? '3D section inspection' : view === 'pre' ? '3D pre-blast block model' : '3D predicted post-blast block model'}
+        aria-label={mode === 'inspect' ? '3D section inspection' : '3D pre-blast block model'}
       />
+      {mode === 'inspect' && slicePosition !== null && (
+        <MovementSlider key={slicePosition} disabled={!sectionBlocks.some((block) => block.movementDistance > 0)} onChange={(progress) => viewerRef.current?.setMovementProgress(progress)} />
+      )}
       {mode === 'inspect' && (
         <button
           type="button"

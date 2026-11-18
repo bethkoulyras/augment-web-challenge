@@ -23,6 +23,7 @@ import {
 } from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { SlicePlane } from './SlicePlane'
+import { SectionMovement } from './SectionMovement'
 import sliceVertexShader from './shaders/slice.vert.glsl?raw'
 import sliceFragmentShader from './shaders/slice.frag.glsl?raw'
 import { colourForValue } from '../data/blockColours'
@@ -31,7 +32,7 @@ import type { Block, BlockModels, ModelView } from '../data/blockModels'
 
 export type ViewerMode = 'model' | 'slice' | 'inspect'
 
-const inspectionPadding = { top: 80, bottom: 224, sides: 24 }
+const inspectionPadding = { top: 80, bottom: 160, sides: 24 }
 
 export class Viewer {
   private readonly scene = new Scene()
@@ -39,7 +40,7 @@ export class Viewer {
   private readonly material = new MeshLambertMaterial({ color: 0xffffff })
   private readonly sliceZ = new Uniform(0)
   private readonly sliceActive = new Uniform(false)
-  private readonly inspectActive = new Uniform(false)
+  private mode: ViewerMode = 'model'
   private readonly clippingPlane = new Plane(new Vector3(0, 0, -1), 0)
   private readonly mesh: InstancedMesh
   private readonly origin = new Vector3()
@@ -54,12 +55,13 @@ export class Viewer {
     new BufferGeometry(),
     new LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthTest: false, depthWrite: false }),
   )
+  private movement: SectionMovement | null = null
+  private movementProgress = 0
+  private selectedIndex: number | null = null
+  private colourScale: ColourScale | null = null
   private readonly pointerDownPosition = new Vector2()
   private readonly raycaster = new Raycaster()
   private readonly pointer = new Vector2()
-  private readonly hit = new Vector3()
-  private sectionBlocks: readonly Block[] = []
-  private sectionBoxes: Box3[] = []
   private currentView: ModelView | null = null
   private slicer: SlicePlane | null = null
   private savedCamera: { position: Vector3; target: Vector3 } | null = null
@@ -107,6 +109,11 @@ export class Viewer {
     this.otherPositionMaterial.opacity = 0.7
     this.otherPositionMaterial.depthTest = false
     this.otherPositionMaterial.depthWrite = false
+    this.hoverHighlight.renderOrder = 2
+    this.selectionHighlight.renderOrder = 2
+    const selectionMaterial = this.selectionHighlight.material as LineBasicMaterial
+    selectionMaterial.depthTest = false
+    selectionMaterial.depthWrite = false
     this.movementLine.visible = false
     this.movementLine.frustumCulled = false
     this.scene.add(this.otherPositionHighlight, this.movementLine)
@@ -129,7 +136,7 @@ export class Viewer {
     this.onSliceChange(initialPosition)
   }
 
-  public setView(view: ModelView): void {
+  private setView(view: ModelView): void {
     if (view === this.currentView) return
     const matrix = new Matrix4()
     this.models[view].forEach((block, index) => {
@@ -142,7 +149,7 @@ export class Viewer {
     this.mesh.computeBoundingBox()
     this.mesh.computeBoundingSphere()
     this.currentView = view
-    if (this.slicer && this.mesh.boundingBox) {
+    if (this.slicer && this.mesh.boundingBox && this.mode !== 'inspect') {
       const previousZ = this.slicer.position.z
       this.slicer.setBounds(this.mesh.boundingBox)
       const position = this.origin.y - this.slicer.position.z
@@ -153,12 +160,14 @@ export class Viewer {
   }
 
   public setColourScale(scale: ColourScale): void {
+    this.colourScale = scale
     const colour = new Color()
     this.models.pre.forEach((block, index) => {
       colour.setHex(colourForValue(scale, block.attributes[scale.field]))
       this.mesh.setColorAt(index, colour)
     })
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
+    this.movement?.setColourScale(scale)
     this.render()
   }
 
@@ -166,7 +175,10 @@ export class Viewer {
     const inspecting = mode === 'inspect'
     this.slicer?.setEnabled(mode === 'slice')
     this.sliceActive.value = mode === 'slice'
-    this.inspectActive.value = inspecting
+    this.mode = mode
+    if (!inspecting) this.setSection([])
+    this.setView(inspecting ? 'post' : 'pre')
+    this.material.color.setScalar(inspecting ? 0.2 : 1)
     this.material.clippingPlanes = inspecting ? [this.clippingPlane] : []
     this.sidebarWidth = inspecting ? sidebarWidth : 0
     this.resize()
@@ -205,38 +217,68 @@ export class Viewer {
 
   public setSection(blocks: readonly Block[]): void {
     this.clearHover()
-    this.sectionBlocks = blocks
-    this.sectionBoxes = blocks.map((block) => this.blockBounds(block))
-    if (this.savedCamera && !this.selectionHighlight.visible) this.frameSection()
+    this.movement?.removeFromParent()
+    this.movement?.dispose()
+    this.movement = null
+    this.selectedIndex = null
+    this.movementLine.visible = false
+    if (blocks.length) {
+      const ids = new Set(blocks.map((block) => block.id))
+      const pre: Block[] = []
+      const post: Block[] = []
+      this.models.pre.forEach((block, index) => {
+        if (ids.has(block.id)) {
+          pre.push(block)
+          post.push(this.models.post[index])
+        }
+      })
+      this.movement = new SectionMovement(pre, post, this.origin)
+      if (this.colourScale) this.movement.setColourScale(this.colourScale)
+      this.scene.add(this.movement)
+    }
+    this.setMovementProgress(0)
+    if (this.savedCamera && this.movement) this.frameSection()
   }
 
   public setSelectedBlock(block: Block | null): void {
-    const wasSelected = this.selectionHighlight.visible
-    const index = block === null ? -1 : this.sectionBlocks.indexOf(block)
-    this.selectionHighlight.visible = index !== -1
-    this.otherPositionHighlight.visible = false
+    const wasSelected = this.selectedIndex !== null
+    const index = block && this.movement ? this.movement.pre.indexOf(block) : -1
+    this.selectedIndex = index === -1 ? null : index
     this.movementLine.visible = false
-    if (index !== -1 && block) {
-      this.selectionHighlight.box.copy(this.sectionBoxes[index]).expandByScalar(0.005)
-      const otherView = this.currentView === 'pre' ? 'post' : 'pre'
-      const other = this.models[otherView].find((candidate) => candidate.id === block.id)
-      if (other) {
-        const otherBounds = this.blockBounds(other)
-        const start = this.sectionBoxes[index].getCenter(new Vector3())
-        const end = otherBounds.getCenter(new Vector3())
-        if (!start.equals(end)) {
-          this.otherPositionHighlight.box.copy(otherBounds)
-          this.otherPositionMaterial.color.setHex(otherView === 'pre' ? 0xa5f3fc : 0xc4b5fd)
-          this.otherPositionHighlight.visible = true
-          this.movementLine.geometry.setFromPoints([start, end])
-          this.movementLine.visible = true
-        }
+    if (this.selectedIndex !== null && this.movement) {
+      const pre = this.movement.pre[this.selectedIndex]
+      const post = this.movement.post[this.selectedIndex]
+      const start = this.blockBounds(pre).getCenter(new Vector3())
+      const end = this.blockBounds(post).getCenter(new Vector3())
+      this.otherPositionHighlight.box.copy(this.blockBounds(post))
+      if (!start.equals(end)) {
+        this.movementLine.geometry.setFromPoints([start, end])
+        this.movementLine.visible = true
       }
-      this.frameBlocks(other ? [block, other] : [block])
-    } else if (wasSelected && this.savedCamera) {
-      this.frameSection()
+      this.updateSelection()
+      this.frameBlocks([pre, post])
+    } else {
+      this.updateSelection()
+      if (wasSelected && this.savedCamera) this.frameSection()
     }
     this.render()
+  }
+
+  public setMovementProgress(progress: number): void {
+    this.movementProgress = MathUtils.clamp(progress, 0, 1)
+    this.movement?.setProgress(this.movementProgress)
+    this.clearHover()
+    this.updateSelection()
+    this.render()
+  }
+
+  private updateSelection(): void {
+    const selected = this.selectedIndex !== null && this.movement !== null
+    this.selectionHighlight.visible = selected
+    this.otherPositionHighlight.visible = selected && this.movementLine.visible && this.movementProgress < 1
+    if (this.selectedIndex !== null && this.movement) {
+      this.selectionHighlight.box.copy(this.movement.blockBounds(this.selectedIndex)).expandByScalar(0.005)
+    }
   }
 
   private blockBounds(block: Block): Box3 {
@@ -341,6 +383,7 @@ export class Viewer {
     this.otherPositionHighlight.dispose()
     this.movementLine.geometry.dispose()
     this.movementLine.material.dispose()
+    this.movement?.dispose()
     this.slicer?.dispose()
     this.resizeObserver.disconnect()
     this.controls.removeEventListener('change', this.render)
@@ -364,7 +407,6 @@ export class Viewer {
     this.material.onBeforeCompile = (shader) => {
       shader.uniforms.slicePosition = this.sliceZ
       shader.uniforms.sliceActive = this.sliceActive
-      shader.uniforms.inspectActive = this.inspectActive
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', `#include <common>\n${sliceVertexShader}`)
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nupdateSliceSelection();')
@@ -385,51 +427,35 @@ export class Viewer {
   }
 
   private readonly clickBlock = (event: MouseEvent): void => {
-    if (this.cameraMove || !this.sectionBlocks.length || event.button !== 0) return
+    if (this.cameraMove || !this.movement || event.button !== 0) return
     const distance = Math.hypot(event.clientX - this.pointerDownPosition.x, event.clientY - this.pointerDownPosition.y)
     if (distance > 4) return
     const index = this.pick(event)
-    this.onSelectBlock(index === null ? null : this.sectionBlocks[index])
+    this.onSelectBlock(index === null ? null : this.movement.pre[index])
   }
 
   private readonly pointerMove = (event: PointerEvent): void => {
-    if (this.cameraMove || !this.sectionBoxes.length) return
+    if (this.cameraMove || !this.movement) return
     if (event.buttons) return this.clearHover()
     const index = this.pick(event)
-    if (index === null) return this.clearHover()
-    this.hoverHighlight.box.copy(this.sectionBoxes[index]).expandByScalar(0.005)
+    if (index === null || index === this.selectedIndex) return this.clearHover()
+    this.hoverHighlight.box.copy(this.movement.blockBounds(index)).expandByScalar(0.005)
     this.hoverHighlight.visible = true
     this.render()
   }
 
   private pick(event: MouseEvent): number | null {
+    if (!this.movement) return null
     const rect = this.renderer.domElement.getBoundingClientRect()
     if (!rect.width || !rect.height) return null
     this.pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, 1 - ((event.clientY - rect.top) / rect.height) * 2)
     this.camera.updateMatrixWorld()
     this.raycaster.setFromCamera(this.pointer, this.camera)
-    let nearest: number | null = null
-    let distance = Infinity
-    for (const [index, box] of this.sectionBoxes.entries()) {
-      if (!this.raycaster.ray.intersectBox(box, this.hit)) continue
-      const hitDistance = this.raycaster.ray.origin.distanceToSquared(this.hit)
-      if (hitDistance < distance) {
-        nearest = index
-        distance = hitDistance
-      }
-    }
-    return nearest
+    return this.raycaster.intersectObject(this.movement)[0]?.instanceId ?? null
   }
 
   public frameSection(): void {
-    if (!this.sectionBlocks.length) return
-    const ids = new Set(this.sectionBlocks.map((block) => block.id))
-    const positions: Block[] = []
-    this.models.pre.forEach((block, index) => {
-      // Pre and post arrays contain matching blocks in the same order.
-      if (ids.has(block.id)) positions.push(this.models.pre[index], this.models.post[index])
-    })
-    this.frameBlocks(positions)
+    if (this.movement) this.frameBlocks([...this.movement.pre, ...this.movement.post])
   }
 
   private readonly resize = (): void => {
@@ -438,8 +464,8 @@ export class Viewer {
     if (width === 0 || height === 0) return
     this.camera.aspect = width / height
     const sidebarWidth = Math.min(this.sidebarWidth, width * 0.45)
-    const rightOffset = this.inspectActive.value ? Math.max(width - sidebarWidth - inspectionPadding.sides * 2, 1) * 0.015 : 0
-    const verticalOffset = this.inspectActive.value ? (inspectionPadding.bottom - inspectionPadding.top) / 2 : 0
+    const rightOffset = this.mode === 'inspect' ? Math.max(width - sidebarWidth - inspectionPadding.sides * 2, 1) * 0.015 : 0
+    const verticalOffset = this.mode === 'inspect' ? (inspectionPadding.bottom - inspectionPadding.top) / 2 : 0
     if (sidebarWidth) this.camera.setViewOffset(width, height, -sidebarWidth / 2 - rightOffset, verticalOffset, width, height)
     else this.camera.clearViewOffset()
     this.camera.updateProjectionMatrix()
