@@ -28,7 +28,7 @@ import sliceVertexShader from './shaders/slice.vert.glsl?raw'
 import sliceFragmentShader from './shaders/slice.frag.glsl?raw'
 import { colourForValue } from '../data/blockColours'
 import type { ColourScale } from '../data/blockColours'
-import type { Block, BlockModels, ModelView } from '../data/blockModels'
+import type { Block, BlockModels } from '../data/blockModels'
 
 export type ViewerMode = 'model' | 'slice' | 'inspect'
 
@@ -64,7 +64,6 @@ export class Viewer {
   private readonly pointerDownPosition = new Vector2()
   private readonly raycaster = new Raycaster()
   private readonly pointer = new Vector2()
-  private currentView: ModelView | null = null
   private slicer: SlicePlane | null = null
   private savedCamera: { position: Vector3; target: Vector3 } | null = null
   private sidebarWidth = 0
@@ -101,7 +100,7 @@ export class Viewer {
     this.renderer.domElement.addEventListener('pointerleave', this.clearHover)
 
     this.configureBlockHighlight()
-    this.mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), this.material, models.pre.length)
+    this.mesh = this.createBlockMesh()
     const light = new DirectionalLight(0xffffff, 1.8)
     light.position.set(1, 3, 2)
     this.hoverHighlight.visible = false
@@ -128,7 +127,6 @@ export class Viewer {
     this.scene.add(this.originalPositionHighlight, this.otherPositionHighlight, this.movementLine)
     this.scene.add(this.mesh, this.hoverHighlight, this.selectionHighlight, new AmbientLight(0xffffff, 0.8), light)
 
-    this.setView('pre')
     const bounds = this.mesh.boundingBox!
 
     this.resizeObserver = new ResizeObserver(this.resize)
@@ -145,27 +143,19 @@ export class Viewer {
     this.onSliceChange(initialPosition)
   }
 
-  private setView(view: ModelView): void {
-    if (view === this.currentView) return
+  private createBlockMesh(): InstancedMesh {
+    const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), this.material, this.models.pre.length)
     const matrix = new Matrix4()
-    this.models[view].forEach((block, index) => {
+    this.models.pre.forEach((block, index) => {
       matrix.makeScale(block.width, block.height, block.depth)
       // Mining Z is elevation; Three.js uses Y as the vertical axis.
-      matrix.setPosition(block.x - this.origin.x, block.z - this.origin.z, -(block.y - this.origin.y))
-      this.mesh.setMatrixAt(index, matrix)
+      matrix.setPosition(block.x - this.origin.x, block.z - this.origin.z, this.origin.y - block.y)
+      mesh.setMatrixAt(index, matrix)
     })
-    this.mesh.instanceMatrix.needsUpdate = true
-    this.mesh.computeBoundingBox()
-    this.mesh.computeBoundingSphere()
-    this.currentView = view
-    if (this.slicer && this.mesh.boundingBox && this.mode !== 'inspect') {
-      const previousZ = this.slicer.position.z
-      this.slicer.setBounds(this.mesh.boundingBox)
-      const position = this.origin.y - this.slicer.position.z
-      this.setSlicePosition(position)
-      if (this.slicer.position.z !== previousZ) this.onSliceChange(position)
-    }
-    this.render()
+    mesh.instanceMatrix.needsUpdate = true
+    mesh.computeBoundingBox()
+    mesh.computeBoundingSphere()
+    return mesh
   }
 
   public setColourScale(scale: ColourScale): void {
@@ -186,7 +176,6 @@ export class Viewer {
     this.sliceActive.value = mode === 'slice'
     this.mode = mode
     if (!inspecting) this.setSection([])
-    this.setView(inspecting ? 'post' : 'pre')
     this.material.color.setScalar(inspecting ? 0.2 : 1)
     this.material.clippingPlanes = inspecting ? [this.clippingPlane] : []
     this.sidebarWidth = inspecting ? sidebarWidth : 0
