@@ -86,7 +86,7 @@ export default function App() {
       {!isLoading && models && colourScale && (
         <>
           <SceneViewer models={models} blastBoundaries={blastBoundaries} colourScale={colourScale} mode={mode} slicePosition={slicePosition} sectionBlocks={trackedBlocks} categoryBlocks={categoryBlocks} categorySelection={categorySelection} selectedBlock={selectedBlock} onSelectBlock={setSelectedBlock} onSliceChange={setSlicePosition} />
-          <div className={"absolute top-20 left-6 z-10 flex max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)] " + (mode === 'model' ? "w-72" : "w-80")}>
+          <div className="absolute top-20 left-6 z-10 flex w-80 max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)]">
             <ColourPalette scale={colourScale} onChange={setColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} />
             <CategoryControls blocks={models.pre} selection={categorySelection} collapsed={categoriesCollapsed} onToggle={() => setCategoriesCollapsed((current) => !current)} onChange={(selection) => { setCategorySelection(selection); setSelectedBlock(null) }} />
             {mode !== 'model' && slicePosition !== null && <CrossSectionPanel blocks={trackedBlocks} scale={colourScale} filtered={categorySelection !== null} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
@@ -101,7 +101,7 @@ export default function App() {
             type="button"
             aria-pressed={mode === 'inspect' ? undefined : mode === 'slice'}
             onClick={mode === 'inspect' ? () => { setMode('slice'); setSelectedBlock(null) } : toggleSlicing}
-            className={"absolute top-6 left-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:border-neutral-500 aria-pressed:bg-neutral-800 aria-pressed:text-neutral-100 " + (mode === 'model' ? "sm:left-84" : "sm:left-92")}
+            className="absolute top-6 left-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:border-neutral-500 aria-pressed:bg-neutral-800 aria-pressed:text-neutral-100 sm:left-92"
           >
             {mode === 'inspect' ? 'Back to slice' : 'Slice model'}
           </button>

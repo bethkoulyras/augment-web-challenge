@@ -202,7 +202,7 @@ export class Viewer {
     if (!inspecting) this.setSection([])
     this.material.color.setScalar(inspecting ? 0.2 : 1)
     this.material.clippingPlanes = inspecting ? [this.clippingPlane] : []
-    this.sidebarWidth = inspecting ? sidebarWidth : 0
+    this.sidebarWidth = sidebarWidth
     this.resize()
 
     if (inspecting && !this.savedCamera) {
