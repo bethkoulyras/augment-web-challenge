@@ -5,7 +5,7 @@ import {
   DoubleSide,
   Group,
   Line,
-  LineDashedMaterial,
+  LineBasicMaterial,
   MathUtils,
   Mesh,
   MeshBasicMaterial,
@@ -27,20 +27,19 @@ export class SlicePlane extends Group {
   private readonly plane = new Mesh(
     new BoxGeometry(1, 1, 1),
     new MeshBasicMaterial({
-      color: '#ff8900',
+      color: '#ffffff',
       side: DoubleSide,
       transparent: true,
-      opacity: 0.045,
+      opacity: 0.025,
+      depthWrite: false,
     }),
   )
   private readonly frame = new Line(
     new BufferGeometry(),
-    new LineDashedMaterial({
-      color: '#ff8900',
-      dashSize: 2,
-      gapSize: 1.5,
+    new LineBasicMaterial({
+      color: '#ffffff',
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.75,
       depthWrite: false,
     }),
   )
@@ -90,7 +89,7 @@ export class SlicePlane extends Group {
     const centre = bounds.getCenter(new Vector3())
     this.position.x = centre.x
     this.position.y = centre.y
-    this.plane.scale.set(size.x + 10, size.y + 20, this.step)
+    this.plane.scale.set(size.x + 12, size.y + 24, this.step)
     const halfWidth = this.plane.scale.x / 2
     const halfHeight = this.plane.scale.y / 2
     this.frame.geometry.dispose()
@@ -101,7 +100,6 @@ export class SlicePlane extends Group {
       new Vector3(-halfWidth, halfHeight, 0),
       new Vector3(-halfWidth, -halfHeight, 0),
     ])
-    this.frame.computeLineDistances()
     this.moveTo(this.position.z)
   }
 
