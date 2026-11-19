@@ -82,7 +82,7 @@ export default function SceneViewer({ models, blastBoundaries, colourScale, mode
           disabled={!movementBlocks.some((block) => block.movementDistance > 0)}
           onChange={(progress) => viewerRef.current?.setMovementProgress(progress)}
           showConnections={showConnections}
-          onConnectionsChange={selectedBlock ? undefined : setShowConnections}
+          onConnectionsChange={mode === 'inspect' && !selectedBlock ? setShowConnections : undefined}
         />
       )}
       {mode === 'inspect' && (

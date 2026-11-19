@@ -1,17 +1,15 @@
-import { BoxGeometry, BufferGeometry, Color, DynamicDrawUsage, InstancedMesh, LineBasicMaterial, LineSegments, Matrix4, MeshLambertMaterial, Points, PointsMaterial, Sphere, Vector3 } from 'three'
+import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, Matrix4, MeshLambertMaterial, Sphere, Vector3 } from 'three'
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js'
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js'
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 import { colourForValue } from '../data/blockColours'
 import type { ColourScale } from '../data/blockColours'
 import type { Block } from '../data/blockModels'
 
 export class SectionMovement extends InstancedMesh<BoxGeometry, MeshLambertMaterial> {
-  public readonly connections = new LineSegments(
-    new BufferGeometry(),
-    new LineBasicMaterial({ color: 0xa3a3a3, transparent: true, opacity: 0.5, depthTest: false, depthWrite: false }),
-  )
-
-  private readonly endpoints = new Points(
-    new BufferGeometry(),
-    new PointsMaterial({ size: 3, sizeAttenuation: false, color: 0xd4d4d4, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false }),
+  public readonly connections = new LineSegments2(
+    new LineSegmentsGeometry(),
+    new LineMaterial({ color: 0xa3a3a3, linewidth: 1.5, transparent: true, opacity: 0.25, depthTest: false, depthWrite: false }),
   )
 
   constructor(
@@ -34,24 +32,18 @@ export class SectionMovement extends InstancedMesh<BoxGeometry, MeshLambertMater
     this.boundingSphere = bounds.getBoundingSphere(new Sphere())
     this.setProgress(0)
 
-    const points: Vector3[] = []
-    const destinations: Vector3[] = []
+    const positions: number[] = []
     pre.forEach((start, index) => {
       if (start.movementDistance > 0) {
         const end = post[index]
-        const destination = new Vector3(end.x - origin.x, end.z - origin.z, origin.y - end.y)
-        points.push(
-          new Vector3(start.x - origin.x, start.z - origin.z, origin.y - start.y),
-          destination,
+        positions.push(
+          start.x - origin.x, start.z - origin.z, origin.y - start.y,
+          end.x - origin.x, end.z - origin.z, origin.y - end.y,
         )
-        destinations.push(destination)
       }
     })
-    this.connections.geometry.setFromPoints(points)
-    this.endpoints.geometry.setFromPoints(destinations)
+    this.connections.geometry.setPositions(positions)
     this.connections.renderOrder = 3
-    this.endpoints.renderOrder = 4
-    this.connections.add(this.endpoints)
     this.add(this.connections)
   }
 
@@ -92,7 +84,5 @@ export class SectionMovement extends InstancedMesh<BoxGeometry, MeshLambertMater
     this.material.dispose()
     this.connections.geometry.dispose()
     this.connections.material.dispose()
-    this.endpoints.geometry.dispose()
-    this.endpoints.material.dispose()
   }
 }

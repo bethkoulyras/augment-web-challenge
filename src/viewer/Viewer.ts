@@ -316,7 +316,7 @@ export class Viewer {
 
   private updateSelection(): void {
     const selected = this.selectedIndex !== null && this.movement !== null
-    if (this.movement) this.movement.connections.visible = this.showConnections && !selected
+    if (this.movement) this.movement.connections.visible = this.mode === 'inspect' && this.showConnections && !selected
     this.selectionHighlight.visible = selected
     this.originalPositionHighlight.visible = selected && this.movementLine.visible && this.movementProgress > 0
     this.otherPositionHighlight.visible = selected && this.movementLine.visible && this.movementProgress < 1

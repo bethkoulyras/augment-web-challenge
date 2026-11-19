@@ -6,13 +6,12 @@ import { createColourScale } from '../data/blockColours'
 interface CategoryControlsProps {
   blocks: readonly Block[]
   selection: CategorySelection | null
-  count: number
   collapsed: boolean
   onToggle: () => void
   onChange: (selection: CategorySelection | null) => void
 }
 
-export default function CategoryControls({ blocks, selection, count, collapsed, onToggle, onChange }: CategoryControlsProps) {
+export default function CategoryControls({ blocks, selection, collapsed, onToggle, onChange }: CategoryControlsProps) {
   const [field, setField] = useState<CategorySelection['field']>('cat_1')
   const scale = useMemo(() => createColourScale(blocks, field), [blocks, field])
 
