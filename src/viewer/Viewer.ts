@@ -32,7 +32,7 @@ import type { Block, BlockModels } from '../data/blockModels'
 
 export type ViewerMode = 'model' | 'slice' | 'inspect'
 
-const inspectionPadding = { top: 80, bottom: 160, sides: 24 }
+const inspectionPadding = { top: 104, bottom: 120, sides: 24 }
 
 export class Viewer {
   private readonly scene = new Scene()
@@ -234,7 +234,7 @@ export class Viewer {
       if (this.colourScale) this.movement.setColourScale(this.colourScale)
       this.scene.add(this.movement)
     }
-    this.setMovementProgress(0)
+    this.setMovementProgress(this.mode === 'inspect' ? this.movementProgress : 0)
     if (this.savedCamera && this.movement) this.frameSection()
   }
 

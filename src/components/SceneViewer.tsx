@@ -67,7 +67,7 @@ export default function SceneViewer({ models, colourScale, mode, slicePosition, 
       />
       {mode === 'inspect' && slicePosition !== null && (
         <MovementSlider
-          key={slicePosition}
+          sectionPosition={slicePosition}
           disabled={!sectionBlocks.some((block) => block.movementDistance > 0)}
           onChange={(progress) => viewerRef.current?.setMovementProgress(progress)}
           showConnections={showConnections}

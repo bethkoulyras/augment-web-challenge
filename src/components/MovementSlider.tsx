@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface MovementSliderProps {
+  sectionPosition: number
   disabled: boolean
   onChange: (progress: number) => void
   showConnections: boolean
   onConnectionsChange?: (show: boolean) => void
 }
 
-export default function MovementSlider({ disabled, onChange, showConnections, onConnectionsChange }: MovementSliderProps) {
+export default function MovementSlider({ sectionPosition, disabled, onChange, showConnections, onConnectionsChange }: MovementSliderProps) {
   const [progress, setProgress] = useState(0)
   const [playing, setPlaying] = useState(false)
   const progressRef = useRef(0)
@@ -23,11 +24,13 @@ export default function MovementSlider({ disabled, onChange, showConnections, on
     onChange(value)
   }
 
-  const pause = (): void => {
+  const pause = useCallback((): void => {
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
     frameRef.current = null
     setPlaying(false)
-  }
+  }, [])
+
+  useEffect(pause, [pause, sectionPosition])
 
   const togglePlayback = (): void => {
     if (frameRef.current !== null) return pause()
