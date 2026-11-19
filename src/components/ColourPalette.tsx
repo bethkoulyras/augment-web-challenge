@@ -30,7 +30,7 @@ export default function ColourPalette({ scale, onChange, collapsed, onToggle }: 
         onClick={onToggle}
         className="flex w-full cursor-pointer items-center justify-between gap-3 rounded text-left focus-visible:outline-2 focus-visible:outline-neutral-300"
       >
-        <span>Colours <span className="ml-2 font-mono text-neutral-200">{scale.field}</span></span>
+        <span>Colour by <span className="ml-2 font-mono text-neutral-200">{scale.field}</span></span>
         <span aria-hidden="true">{collapsed ? "▾" : "▴"}</span>
       </button>
 

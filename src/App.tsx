@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import SceneViewer from './components/SceneViewer'
 import ColourPalette from './components/ColourPalette'
+import CategoryControls from './components/CategoryControls'
 import CrossSectionPanel from './components/CrossSectionPanel'
 import SectionSlider from './components/SectionSlider'
 import BlockInspector from './components/BlockInspector'
@@ -8,7 +9,8 @@ import SectionSummary from './components/SectionSummary'
 import { createColourScale } from './data/blockColours'
 import { csvFiles } from './data/csvFiles'
 import { createBlockModels } from './data/blockModels'
-import type { Block, ColourField } from './data/blockModels'
+import { createBlastBoundarySegments } from './data/blastBoundary'
+import type { Block, CategorySelection, ColourField } from './data/blockModels'
 import type { ViewerMode } from './viewer/Viewer'
 import { loadCsv } from './utils/loadCsv'
 import type { CsvRow } from './utils/loadCsv'
@@ -17,20 +19,38 @@ export default function App() {
   const [data, setData] = useState<Record<string, CsvRow[]>>({})
   const [error, setError] = useState<string | null>(null)
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null)
+  const [categorySelection, setCategorySelection] = useState<CategorySelection | null>(null)
   const [mode, setMode] = useState<ViewerMode>('model')
   const [slicePosition, setSlicePosition] = useState<number | null>(null)
   const [paletteCollapsed, setPaletteCollapsed] = useState(false)
+  const [categoriesCollapsed, setCategoriesCollapsed] = useState(false)
   const [colourField, setColourField] = useState<ColourField>('grade_01')
   const isLoading = csvFiles.some((file) => !data[file])
+  const preBoundaryRows = data['1_pre_string.csv']
+  const postBoundaryRows = data['1_pst_string.csv']
+  const blastBoundaries = useMemo(() => ({
+    pre: createBlastBoundarySegments(preBoundaryRows ?? []),
+    post: createBlastBoundarySegments(postBoundaryRows ?? []),
+  }), [preBoundaryRows, postBoundaryRows])
   const mbmRows = data['1_mbm.csv']
   const models = useMemo(() => mbmRows ? createBlockModels(mbmRows) : null, [mbmRows])
 
   const colourScale = useMemo(() => models ? createColourScale(models.pre, colourField) : null, [models, colourField])
 
+  const categoryBlocks = useMemo(() => {
+    if (!models || !categorySelection) return null
+    return models.pre.filter((block) => block.attributes[categorySelection.field] === categorySelection.value)
+  }, [models, categorySelection])
+
   const sectionBlocks = useMemo(() => {
     if (!models || slicePosition === null) return []
     return models.pre.filter((block) => Math.abs(block.y - slicePosition) <= block.depth / 2 + 0.001)
   }, [models, slicePosition])
+
+  const trackedBlocks = useMemo(() => {
+    if (!categorySelection) return sectionBlocks
+    return sectionBlocks.filter((block) => block.attributes[categorySelection.field] === categorySelection.value)
+  }, [sectionBlocks, categorySelection])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -57,6 +77,7 @@ export default function App() {
     const enabled = mode === 'model'
     setMode(enabled ? 'slice' : 'model')
     setPaletteCollapsed(enabled)
+    setCategoriesCollapsed(enabled)
     setSelectedBlock(null)
   }
 
@@ -64,16 +85,17 @@ export default function App() {
     <main className="relative h-full w-full">
       {!isLoading && models && colourScale && (
         <>
-          <SceneViewer models={models} colourScale={colourScale} mode={mode} slicePosition={slicePosition} sectionBlocks={sectionBlocks} selectedBlock={selectedBlock} onSelectBlock={setSelectedBlock} onSliceChange={setSlicePosition} />
+          <SceneViewer models={models} blastBoundaries={blastBoundaries} colourScale={colourScale} mode={mode} slicePosition={slicePosition} sectionBlocks={trackedBlocks} categoryBlocks={categoryBlocks} categorySelection={categorySelection} selectedBlock={selectedBlock} onSelectBlock={setSelectedBlock} onSliceChange={setSlicePosition} />
           <div className={"absolute top-20 left-6 z-10 flex max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)] " + (mode === 'model' ? "w-72" : "w-80")}>
             <ColourPalette scale={colourScale} onChange={setColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} />
-            {mode !== 'model' && slicePosition !== null && <CrossSectionPanel blocks={sectionBlocks} scale={colourScale} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
+            <CategoryControls blocks={models.pre} selection={categorySelection} count={categoryBlocks?.length ?? models.pre.length} collapsed={categoriesCollapsed} onToggle={() => setCategoriesCollapsed((current) => !current)} onChange={(selection) => { setCategorySelection(selection); setSelectedBlock(null) }} />
+            {mode !== 'model' && slicePosition !== null && <CrossSectionPanel blocks={trackedBlocks} scale={colourScale} filtered={categorySelection !== null} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
             {mode === 'inspect' && slicePosition !== null && !selectedBlock && (
               <SectionSlider blocks={models.pre} position={slicePosition} onChange={(position) => { setSlicePosition(position); setSelectedBlock(null) }} />
             )}
             {mode === 'inspect' && (selectedBlock
               ? <BlockInspector block={selectedBlock} models={models} field={colourField} onClear={() => setSelectedBlock(null)} />
-              : <SectionSummary blocks={sectionBlocks} />)}
+              : <SectionSummary blocks={trackedBlocks} totalCount={sectionBlocks.length} />)}
           </div>
           <button
             type="button"

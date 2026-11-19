@@ -9,6 +9,7 @@ import {
   InstancedMesh,
   Line,
   LineBasicMaterial,
+  LineSegments,
   MathUtils,
   Matrix4,
   MeshLambertMaterial,
@@ -28,7 +29,8 @@ import sliceVertexShader from './shaders/slice.vert.glsl?raw'
 import sliceFragmentShader from './shaders/slice.frag.glsl?raw'
 import { colourForValue } from '../data/blockColours'
 import type { ColourScale } from '../data/blockColours'
-import type { Block, BlockModels } from '../data/blockModels'
+import type { BlastBoundaries } from '../data/blastBoundary'
+import type { Block, BlockModels, CategorySelection } from '../data/blockModels'
 
 export type ViewerMode = 'model' | 'slice' | 'inspect'
 
@@ -47,6 +49,10 @@ export class Viewer {
   private readonly renderer: WebGLRenderer
   private readonly controls: OrbitControls
   private readonly resizeObserver: ResizeObserver
+  private readonly blastBoundaries = [1, 0].map((opacity) => new LineSegments(
+    new BufferGeometry(),
+    new LineBasicMaterial({ color: 0xa3a3a3, transparent: true, opacity: 0.4 * opacity, depthTest: false, depthWrite: false }),
+  ))
   private readonly hoverHighlight = new Box3Helper(new Box3(), 0xffffff)
   private readonly selectionHighlight = new Box3Helper(new Box3(), 0xffffff)
   private readonly originalPositionHighlight = new Box3Helper(new Box3(), 0xa3a3a3)
@@ -128,6 +134,11 @@ export class Viewer {
     this.scene.add(this.mesh, this.hoverHighlight, this.selectionHighlight, new AmbientLight(0xffffff, 0.8), light)
 
     const bounds = this.mesh.boundingBox!
+    for (const boundary of this.blastBoundaries) {
+      boundary.visible = false
+      boundary.renderOrder = 2
+    }
+    this.scene.add(...this.blastBoundaries)
 
     this.resizeObserver = new ResizeObserver(this.resize)
     this.resizeObserver.observe(container)
@@ -158,11 +169,23 @@ export class Viewer {
     return mesh
   }
 
-  public setColourScale(scale: ColourScale): void {
+  public setBlastBoundaries(boundaries: BlastBoundaries): void {
+    const stages = [boundaries.pre, boundaries.post]
+    this.blastBoundaries.forEach((boundary, index) => {
+      boundary.geometry.dispose()
+      boundary.geometry = new BufferGeometry().setFromPoints(stages[index].map((point) => new Vector3(
+        point.x - this.origin.x, point.z - this.origin.z, this.origin.y - point.y,
+      )))
+    })
+    this.render()
+  }
+
+  public setColourScale(scale: ColourScale, categorySelection: CategorySelection | null = null): void {
     this.colourScale = scale
     const colour = new Color()
     this.models.pre.forEach((block, index) => {
       colour.setHex(colourForValue(scale, block.attributes[scale.field]))
+      if (categorySelection && block.attributes[categorySelection.field] !== categorySelection.value) colour.multiplyScalar(0.2)
       this.mesh.setColorAt(index, colour)
     })
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
@@ -172,6 +195,7 @@ export class Viewer {
 
   public setMode(mode: ViewerMode, sidebarWidth = 0): void {
     const inspecting = mode === 'inspect'
+    if (mode !== this.mode) this.setMovementProgress(0)
     this.slicer?.setEnabled(mode === 'slice')
     this.sliceActive.value = mode === 'slice'
     this.mode = mode
@@ -214,6 +238,7 @@ export class Viewer {
   }
 
   public setSection(blocks: readonly Block[]): void {
+    this.cameraMove = null
     this.clearHover()
     this.movement?.removeFromParent()
     this.movement?.dispose()
@@ -234,8 +259,18 @@ export class Viewer {
       if (this.colourScale) this.movement.setColourScale(this.colourScale)
       this.scene.add(this.movement)
     }
-    this.setMovementProgress(this.mode === 'inspect' ? this.movementProgress : 0)
-    if (this.savedCamera && this.movement) this.frameSection()
+    this.setMovementProgress(!blocks.length && this.mode !== 'inspect' ? 0 : this.movementProgress)
+    const focused = this.movement !== null || this.mode === 'inspect'
+    this.material.transparent = focused
+    this.material.opacity = focused ? 0.01 : 1
+    this.material.depthWrite = !focused
+    this.material.color.setScalar(focused ? 0.1 : 1)
+    this.material.needsUpdate = true
+    for (const boundary of this.blastBoundaries) {
+      boundary.visible = focused
+      boundary.material.clippingPlanes = this.mode === 'inspect' ? [this.clippingPlane] : []
+    }
+    this.render()
   }
 
   public setSelectedBlock(block: Block | null): void {
@@ -266,6 +301,8 @@ export class Viewer {
   public setMovementProgress(progress: number): void {
     this.movementProgress = MathUtils.clamp(progress, 0, 1)
     this.movement?.setProgress(this.movementProgress)
+    this.blastBoundaries[0].material.opacity = 0.4 * (1 - this.movementProgress)
+    this.blastBoundaries[1].material.opacity = 0.4 * this.movementProgress
     this.clearHover()
     this.updateSelection()
     this.render()
@@ -385,6 +422,10 @@ export class Viewer {
     if (this.disposed) return
     this.disposed = true
     if (this.renderFrame !== null) cancelAnimationFrame(this.renderFrame)
+    for (const boundary of this.blastBoundaries) {
+      boundary.geometry.dispose()
+      boundary.material.dispose()
+    }
     this.hoverHighlight.dispose()
     this.selectionHighlight.dispose()
     this.originalPositionHighlight.dispose()
@@ -435,7 +476,7 @@ export class Viewer {
   }
 
   private readonly clickBlock = (event: MouseEvent): void => {
-    if (this.cameraMove || !this.movement || event.button !== 0) return
+    if (this.mode !== 'inspect' || this.cameraMove || !this.movement || event.button !== 0) return
     const distance = Math.hypot(event.clientX - this.pointerDownPosition.x, event.clientY - this.pointerDownPosition.y)
     if (distance > 4) return
     const index = this.pick(event)
@@ -443,7 +484,7 @@ export class Viewer {
   }
 
   private readonly pointerMove = (event: PointerEvent): void => {
-    if (this.cameraMove || !this.movement) return
+    if (this.mode !== 'inspect' || this.cameraMove || !this.movement) return
     if (event.buttons) return this.clearHover()
     const index = this.pick(event)
     if (index === null || index === this.selectedIndex) return this.clearHover()

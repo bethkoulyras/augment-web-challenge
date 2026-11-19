@@ -2,24 +2,29 @@ import { useEffect, useRef, useState } from 'react'
 import MovementSlider from './MovementSlider'
 import { Viewer } from '../viewer/Viewer'
 import type { ViewerMode } from '../viewer/Viewer'
+import type { BlastBoundaries } from '../data/blastBoundary'
 import type { ColourScale } from '../data/blockColours'
-import type { Block, BlockModels } from '../data/blockModels'
+import type { Block, BlockModels, CategorySelection } from '../data/blockModels'
 
 interface SceneViewerProps {
   models: BlockModels
+  blastBoundaries: BlastBoundaries
   colourScale: ColourScale
   mode: ViewerMode
   slicePosition: number | null
   selectedBlock: Block | null
   onSelectBlock: (block: Block | null) => void
   sectionBlocks: readonly Block[]
+  categoryBlocks: readonly Block[] | null
+  categorySelection: CategorySelection | null
   onSliceChange: (position: number) => void
 }
 
-export default function SceneViewer({ models, colourScale, mode, slicePosition, sectionBlocks, selectedBlock, onSelectBlock, onSliceChange }: SceneViewerProps) {
+export default function SceneViewer({ models, blastBoundaries, colourScale, mode, slicePosition, sectionBlocks, categoryBlocks, categorySelection, selectedBlock, onSelectBlock, onSliceChange }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
   const [showConnections, setShowConnections] = useState(false)
+  const movementBlocks = mode === 'inspect' ? sectionBlocks : mode === 'model' ? categoryBlocks : null
 
   useEffect(() => {
     const container = containerRef.current
@@ -33,7 +38,9 @@ export default function SceneViewer({ models, colourScale, mode, slicePosition, 
     }
   }, [models, onSliceChange, onSelectBlock])
 
-  useEffect(() => viewerRef.current?.setColourScale(colourScale), [models, colourScale])
+  useEffect(() => viewerRef.current?.setBlastBoundaries(blastBoundaries), [models, blastBoundaries])
+
+  useEffect(() => viewerRef.current?.setColourScale(colourScale, mode === 'slice' ? categorySelection : null), [models, colourScale, mode, categorySelection])
 
   useEffect(() => {
     const sidebarWidth = 320
@@ -46,12 +53,16 @@ export default function SceneViewer({ models, colourScale, mode, slicePosition, 
   }, [models, mode, slicePosition])
 
   useEffect(() => {
-    viewerRef.current?.setSection(mode === 'inspect' ? sectionBlocks : [])
-  }, [models, mode, sectionBlocks])
+    viewerRef.current?.setSection(movementBlocks ?? [])
+  }, [models, mode, movementBlocks])
 
   useEffect(() => {
     viewerRef.current?.setSelectedBlock(mode === 'inspect' ? selectedBlock : null)
-  }, [models, mode, sectionBlocks, selectedBlock])
+  }, [models, mode, movementBlocks, selectedBlock])
+
+  useEffect(() => {
+    if (mode === 'inspect') viewerRef.current?.frameSection()
+  }, [models, mode, slicePosition])
 
   useEffect(() => {
     viewerRef.current?.setConnectionsVisible(showConnections)
@@ -63,12 +74,12 @@ export default function SceneViewer({ models, colourScale, mode, slicePosition, 
         ref={containerRef}
         className="relative h-full w-full overflow-hidden"
         role="group"
-        aria-label={mode === 'inspect' ? '3D section inspection' : '3D pre-blast block model'}
+        aria-label={mode === 'inspect' ? '3D section inspection' : '3D block model'}
       />
-      {mode === 'inspect' && slicePosition !== null && (
+      {movementBlocks !== null && (
         <MovementSlider
-          sectionPosition={slicePosition}
-          disabled={!sectionBlocks.some((block) => block.movementDistance > 0)}
+          sectionBlocks={movementBlocks}
+          disabled={!movementBlocks.some((block) => block.movementDistance > 0)}
           onChange={(progress) => viewerRef.current?.setMovementProgress(progress)}
           showConnections={showConnections}
           onConnectionsChange={selectedBlock ? undefined : setShowConnections}

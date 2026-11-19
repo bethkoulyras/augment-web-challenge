@@ -3,9 +3,10 @@ import type { Block } from '../data/blockModels'
 
 interface SectionSummaryProps {
   blocks: readonly Block[]
+  totalCount: number
 }
 
-export default function SectionSummary({ blocks }: SectionSummaryProps) {
+export default function SectionSummary({ blocks, totalCount }: SectionSummaryProps) {
   const stats = useMemo(() => {
     if (!blocks.length) return null
     let total = 0
@@ -21,7 +22,7 @@ export default function SectionSummary({ blocks }: SectionSummaryProps) {
     <section aria-label="Section movement summary" className="shrink-0 space-y-2 rounded-xl border border-white/10 bg-neutral-900/95 p-3 text-xs text-neutral-300 shadow-lg">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-medium text-neutral-100">Predicted movement</h2>
-        <span className="text-neutral-400">{blocks.length.toLocaleString()} blocks</span>
+        <span className="text-neutral-400">{blocks.length.toLocaleString()}{blocks.length !== totalCount && ' of ' + totalCount.toLocaleString()} blocks</span>
       </div>
       <dl className="grid grid-cols-2 gap-3">
         <div>

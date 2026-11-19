@@ -6,12 +6,14 @@ interface CrossSectionPanelProps {
   blocks: readonly Block[];
   scale: ColourScale;
   onInspect?: () => void;
+  filtered: boolean;
 }
 
 export default function CrossSectionPanel({
   blocks,
   scale,
   onInspect,
+  filtered,
 }: CrossSectionPanelProps) {
   return (
     <section
@@ -23,7 +25,7 @@ export default function CrossSectionPanel({
         <CrossSectionCanvas blocks={blocks} scale={scale} />
         {!blocks.length && (
           <p className="absolute inset-0 grid place-items-center text-neutral-500">
-            No blocks at this section.
+            {filtered ? "No matching blocks in this section." : "No blocks at this section."}
           </p>
         )}
       </div>

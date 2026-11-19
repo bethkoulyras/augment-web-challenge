@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { Block } from '../data/blockModels'
 
 interface MovementSliderProps {
-  sectionPosition: number
+  sectionBlocks: readonly Block[]
   disabled: boolean
   onChange: (progress: number) => void
   showConnections: boolean
   onConnectionsChange?: (show: boolean) => void
 }
 
-export default function MovementSlider({ sectionPosition, disabled, onChange, showConnections, onConnectionsChange }: MovementSliderProps) {
+export default function MovementSlider({ sectionBlocks, disabled, onChange, showConnections, onConnectionsChange }: MovementSliderProps) {
   const [progress, setProgress] = useState(0)
   const [playing, setPlaying] = useState(false)
   const progressRef = useRef(0)
@@ -30,7 +31,7 @@ export default function MovementSlider({ sectionPosition, disabled, onChange, sh
     setPlaying(false)
   }, [])
 
-  useEffect(pause, [pause, sectionPosition])
+  useEffect(pause, [pause, sectionBlocks])
 
   const togglePlayback = (): void => {
     if (frameRef.current !== null) return pause()
@@ -51,7 +52,7 @@ export default function MovementSlider({ sectionPosition, disabled, onChange, sh
   }
 
   return (
-    <section aria-label="Section movement" className="absolute right-6 bottom-6 left-6 z-10 mx-auto max-w-2xl rounded-xl border border-neutral-700 bg-neutral-900/95 px-4 py-3 text-xs text-neutral-300 shadow-lg sm:left-92">
+    <section aria-label="Predicted material movement" className="absolute right-6 bottom-6 left-6 z-10 mx-auto max-w-2xl rounded-xl border border-neutral-700 bg-neutral-900/95 px-4 py-3 text-xs text-neutral-300 shadow-lg sm:left-92">
       <div className="flex items-center gap-3">
         <button type="button" disabled={disabled} onClick={togglePlayback} className="min-w-20 cursor-pointer rounded-lg bg-neutral-700 px-4 py-2 font-medium text-neutral-100 hover:bg-neutral-600 focus-visible:outline-2 focus-visible:outline-neutral-300 disabled:cursor-default disabled:opacity-40">
           {playing ? 'Pause' : progress === 1 ? 'Replay' : 'Play'}
@@ -78,12 +79,17 @@ export default function MovementSlider({ sectionPosition, disabled, onChange, sh
           </div>
         </div>
       </div>
-      {onConnectionsChange && (
-        <label className="mt-3 ml-auto flex w-fit cursor-pointer items-center gap-2 text-neutral-400">
-          <input type="checkbox" checked={showConnections} onChange={(event) => onConnectionsChange(event.currentTarget.checked)} className="cursor-pointer accent-neutral-300" />
-          Movement connections
-        </label>
-      )}
+      <div className="mt-3 flex items-center justify-between gap-3 text-neutral-500">
+        <span className="flex items-center gap-2"><span aria-hidden="true" className="w-4 border-t border-neutral-500" />
+          Blast Boundary
+        </span>
+        {onConnectionsChange && (
+          <label className="flex w-fit cursor-pointer items-center gap-2 text-neutral-400">
+            <input type="checkbox" checked={showConnections} onChange={(event) => onConnectionsChange(event.currentTarget.checked)} className="cursor-pointer accent-neutral-300" />
+            Movement connections
+          </label>
+        )}
+      </div>
     </section>
   )
 }

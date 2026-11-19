@@ -25,6 +25,11 @@ export interface BlockModels {
   post: Block[]
 }
 
+export interface CategorySelection {
+  field: typeof categoryFields[number]
+  value: number
+}
+
 export type ModelView = keyof BlockModels
 
 export function createBlockModels(rows: CsvRow[]): BlockModels {
