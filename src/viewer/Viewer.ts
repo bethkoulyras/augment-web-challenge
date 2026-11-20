@@ -198,9 +198,7 @@ export class Viewer {
       this.movement.setCount(movementCount)
       if (movementCount > previousCount) this.movement.setProgress(this.movementProgress, previousCount)
     }
-    for (const boundary of this.blastBoundaries) {
-      boundary.visible = this.movement !== null || this.mode === 'inspect' || visibleCount < this.models.pre.length
-    }
+    this.updateBlastBoundaryVisibility()
     this.clearHover()
     this.render()
   }
@@ -214,6 +212,11 @@ export class Viewer {
       )))
     })
     this.render()
+  }
+
+  private updateBlastBoundaryVisibility(): void {
+    const visible = this.mode !== 'model' || this.movement !== null || this.mesh.count < this.models.pre.length
+    for (const boundary of this.blastBoundaries) boundary.visible = visible
   }
 
   public setBlastHoles(holes: readonly BlastHole[]): void {
@@ -326,8 +329,8 @@ export class Viewer {
     this.material.depthWrite = !focused
     this.material.color.setScalar(focused ? 0.1 : 1)
     this.material.needsUpdate = true
+    this.updateBlastBoundaryVisibility()
     for (const boundary of this.blastBoundaries) {
-      boundary.visible = focused || this.mesh.count < this.models.pre.length
       boundary.material.clippingPlanes = this.mode === 'inspect' ? [this.clippingPlane] : []
     }
     this.render()
