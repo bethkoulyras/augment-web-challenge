@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import type { Block } from '../data/blockModels'
 import type { ViewerMode } from '../viewer/Viewer'
 
@@ -84,17 +84,18 @@ export default function MovementSlider({ mode, getMovementBlocks, movementCount,
             step={0.01}
             value={progress}
             disabled={disabled}
-            aria-label="Movement progress"
-            aria-valuetext={Math.round(progress * 100) + '%'}
+            aria-label="Animation progress"
+            aria-valuetext={progress === 0 ? 'Pre-blast' : progress === 1 ? 'Predicted post-blast' : Math.round(progress * 100) + '% of animation'}
             onChange={(event) => {
               pause()
               changeProgress(event.currentTarget.valueAsNumber)
             }}
-            className="block w-full cursor-pointer accent-neutral-300"
+            style={{ '--playback-progress': `${progress * 100}%` } as CSSProperties}
+            className="playback-scrubber block h-6 w-full cursor-pointer appearance-none rounded-sm bg-transparent text-neutral-100 enabled:hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 disabled:cursor-default disabled:opacity-40"
           />
-          <div className="mt-2 flex justify-between text-neutral-400">
+          <div className="mt-2 flex justify-between gap-2 text-neutral-400">
             <span>Pre-blast</span>
-            <span>OMP prediction</span>
+            <span className="text-right">Predicted post-blast</span>
           </div>
         </div>
       </div>
