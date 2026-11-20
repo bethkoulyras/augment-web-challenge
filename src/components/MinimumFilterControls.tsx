@@ -21,7 +21,15 @@ export default function MinimumFilterControls({ scale, minimum, onChange }: Mini
     <div role="group" aria-label={title} className="space-y-3 border-t border-white/10 pt-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-medium text-neutral-100">{title}</h2>
-        <button type="button" disabled={minimum === null} onClick={() => onChange(null)} className="cursor-pointer rounded text-neutral-400 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 disabled:cursor-default disabled:opacity-40">Reset</button>
+        <button
+          type="button"
+          onClick={() => {
+            if (minimum !== null) onChange(null)
+          }}
+          className="cursor-pointer rounded text-neutral-400 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300"
+        >
+          Reset
+        </button>
       </div>
       <div className="flex items-center justify-between gap-3">
         <label htmlFor={id}>{movement ? 'Distance moved' : 'Grade'}</label>
