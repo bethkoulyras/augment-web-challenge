@@ -3,11 +3,9 @@ import {
   Box3,
   Box3Helper,
   BoxGeometry,
-  BufferAttribute,
   BufferGeometry,
   Color,
   DirectionalLight,
-  DoubleSide,
   InstancedBufferAttribute,
   InstancedMesh,
   Line,
@@ -15,7 +13,6 @@ import {
   LineSegments,
   MathUtils,
   Matrix4,
-  Mesh,
   MeshLambertMaterial,
   PerspectiveCamera,
   Plane,
@@ -31,6 +28,7 @@ import {
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { SlicePlane } from './SlicePlane'
 import { SectionMovement } from './SectionMovement'
+import { SurveyLayer } from './SurveyLayer'
 import sliceVertexShader from './shaders/slice.vert.glsl?raw'
 import sliceFragmentShader from './shaders/slice.frag.glsl?raw'
 import { blockColourAttribute } from './blockColourAttribute'
@@ -43,12 +41,22 @@ import type { SurveySurfaces } from '../data/surveySurfaces'
 
 export type ViewerMode = 'model' | 'slice' | 'inspect'
 
+export interface BlockView {
+  mode: ViewerMode
+  visibleBlocks: readonly Block[]
+  visibleCount: number
+  movementBlocks: readonly Block[] | null
+  movementCount: number
+  colourScale: ColourScale | undefined
+  categorySelection: CategorySelection | null
+  selectedBlock: Block | null
+}
+
 const inspectionPadding = { top: 64, bottom: 216, sides: 24 }
-const surveyStages = ['pre', 'post'] as const
 
 export class Viewer {
   private readonly scene = new Scene()
-  private readonly surveyScene = new Scene()
+  private readonly surveyLayer: SurveyLayer
   private readonly camera = new PerspectiveCamera(45, 1, 0.1, 100)
   private readonly material = new MeshLambertMaterial({ color: 0xffffff })
   private readonly sliceZ = new Uniform(0)
@@ -56,7 +64,7 @@ export class Viewer {
   private mode: ViewerMode = 'model'
   private readonly clippingPlane = new Plane(new Vector3(0, 0, -1), 0)
   private readonly mesh: InstancedMesh
-  private visibleBlocks: readonly Block[] = []
+  private blockView: BlockView | null = null
   private readonly origin = new Vector3()
   private readonly renderer: WebGLRenderer
   private readonly controls: OrbitControls
@@ -66,11 +74,6 @@ export class Viewer {
     new BufferGeometry(),
     new LineBasicMaterial({ color: 0xa3a3a3, transparent: true, opacity: 0.4 * opacity, depthTest: false, depthWrite: false }),
   ))
-  private readonly surveySurfaces = surveyStages.map(() => new Mesh(
-    new BufferGeometry(),
-    new MeshLambertMaterial({ color: 0x8096aa, side: DoubleSide, opacity: 0.7, flatShading: true, transparent: true, depthWrite: false, forceSinglePass: true }),
-  ))
-  private readonly surveyOpacity = this.surveySurfaces[0].material.opacity
   private readonly blastHoleLines = new LineSegments(
     new BufferGeometry(),
     new LineBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.65, depthTest: false, depthWrite: false }),
@@ -90,7 +93,6 @@ export class Viewer {
   )
   private movement: SectionMovement | null = null
   private movementProgress = 0
-  private showSurveySurfaces = false
   private showConnections = false
   private selectedIndex: number | null = null
   private readonly pointerDownPosition = new Vector2()
@@ -169,8 +171,7 @@ export class Viewer {
     const bounds = this.mesh.boundingBox!
     for (const boundary of this.blastBoundaries) boundary.renderOrder = 2
     this.scene.add(...this.blastBoundaries)
-    for (const surface of this.surveySurfaces) surface.visible = false
-    this.surveyScene.add(...this.surveySurfaces, ambientLight.clone(), light.clone())
+    this.surveyLayer = new SurveyLayer(this.origin, ambientLight, light)
     this.blastHoleLines.visible = false
     this.blastHoleLines.renderOrder = 4
     this.blastHoleCollars.renderOrder = 5
@@ -191,10 +192,29 @@ export class Viewer {
     this.onSliceChange(initialPosition)
   }
 
-  public setVisibleBlocks(blocks: readonly Block[]): void {
-    if (blocks === this.visibleBlocks) return
-    this.visibleBlocks = blocks
-    this.mesh.count = blocks.length
+  public setBlockView(view: BlockView): void {
+    const previous = this.blockView
+    const { mode, movementBlocks, visibleBlocks, visibleCount, movementCount, colourScale, categorySelection, selectedBlock } = view
+    const movementChanged = !previous || mode !== previous.mode || movementBlocks !== previous.movementBlocks
+    const blocksChanged = visibleBlocks !== (previous?.visibleBlocks ?? this.blocks)
+    const category = mode === 'slice' ? categorySelection : null
+
+    if (movementChanged) this.setMovementBlocks(mode, movementBlocks ?? [])
+    if (blocksChanged) this.setVisibleBlocks(visibleBlocks)
+    if (colourScale && (movementChanged || blocksChanged || colourScale !== previous.colourScale || categorySelection !== previous.categorySelection)) {
+      this.setColourScale(visibleBlocks, colourScale, category)
+    }
+    if (movementChanged || blocksChanged || visibleCount !== previous.visibleCount || movementCount !== previous.movementCount) {
+      this.setBlockCounts(visibleCount, movementCount)
+    }
+    if (movementChanged || selectedBlock !== previous.selectedBlock) {
+      this.setSelectedBlock(mode === 'inspect' ? selectedBlock : null)
+    }
+    this.blockView = view
+    this.render()
+  }
+
+  private setVisibleBlocks(blocks: readonly Block[]): void {
     const matrix = new Matrix4()
     blocks.forEach((block, index) => {
       matrix.makeScale(block.width, block.height, block.depth)
@@ -203,10 +223,9 @@ export class Viewer {
       this.mesh.setMatrixAt(index, matrix)
     })
     this.mesh.instanceMatrix.needsUpdate = true
-    this.render()
   }
 
-  public setBlockCounts(visibleCount: number, movementCount: number): void {
+  private setBlockCounts(visibleCount: number, movementCount: number): void {
     this.mesh.count = visibleCount
     if (this.movement) {
       const previousCount = this.movement.count
@@ -214,7 +233,6 @@ export class Viewer {
       if (movementCount > previousCount) this.movement.setProgress(this.movementProgress, previousCount)
     }
     this.clearHover()
-    this.render()
   }
 
   public setBlastBoundaries(boundaries: BlastBoundaries): void {
@@ -229,31 +247,14 @@ export class Viewer {
   }
 
   public setSurveySurfaces(surfaces: SurveySurfaces): void {
-    surveyStages.forEach((stage, index) => {
-      const mesh = this.surveySurfaces[index]
-      const { origin: [x, y, z], positions } = surfaces[stage]
-      mesh.geometry.dispose()
-      mesh.geometry = new BufferGeometry().setAttribute('position', new BufferAttribute(positions, 3))
-      mesh.position.set(x - this.origin.x, z - this.origin.z, this.origin.y - y)
-    })
-    this.updateSurveySurfaces()
+    this.surveyLayer.setSurfaces(surfaces)
+    this.surveyLayer.setProgress(this.movementProgress, this.mode !== 'model')
     this.render()
   }
 
   public setSurveySurfacesVisible(visible: boolean): void {
-    this.showSurveySurfaces = visible
-    this.updateSurveySurfaces()
+    this.surveyLayer.visible = visible
     this.render()
-  }
-
-  private updateSurveySurfaces(): void {
-    const opacity = this.surveyOpacity * (this.mode === 'model' ? 1 : 0.35)
-    this.surveySurfaces.forEach((mesh, index) => {
-      const weight = index === 0 ? 1 - this.movementProgress : this.movementProgress
-      mesh.material.opacity = opacity * weight
-      mesh.material.depthWrite = weight === 1
-      mesh.visible = this.showSurveySurfaces && weight > 0 && mesh.geometry.hasAttribute('position')
-    })
   }
 
   public setBlastHoles(holes: readonly BlastHole[]): void {
@@ -283,12 +284,12 @@ export class Viewer {
     this.render()
   }
 
-  public setColourScale(scale: ColourScale, categorySelection: CategorySelection | null = null): void {
-    const colours = blockColourAttribute(this.visibleBlocks, scale)
+  private setColourScale(blocks: readonly Block[], scale: ColourScale, categorySelection: CategorySelection | null): void {
+    const colours = blockColourAttribute(blocks, scale)
     this.mesh.instanceColor = categorySelection ? new InstancedBufferAttribute(colours.array.slice(), 3) : colours
     if (categorySelection) {
       const colour = new Color()
-      this.visibleBlocks.forEach((block, index) => {
+      blocks.forEach((block, index) => {
         if (block.attributes[categorySelection.field] !== categorySelection.value) {
           colour.fromBufferAttribute(colours, index).multiplyScalar(0.2)
           this.mesh.instanceColor!.setXYZ(index, colour.r, colour.g, colour.b)
@@ -296,7 +297,6 @@ export class Viewer {
       })
     }
     this.movement?.setColourScale(scale)
-    this.render()
   }
 
   private setMode(mode: ViewerMode): void {
@@ -307,7 +307,7 @@ export class Viewer {
     this.sliceActive.value = mode === 'slice'
     this.mode = mode
     this.material.clippingPlanes = inspecting ? [this.clippingPlane] : []
-    for (const surface of this.surveySurfaces) surface.material.clippingPlanes = this.material.clippingPlanes
+    this.surveyLayer.setClippingPlanes(this.material.clippingPlanes)
     this.blastHoleLines.material.clippingPlanes = this.material.clippingPlanes
     this.blastHoleCollars.material.clippingPlanes = this.material.clippingPlanes
     this.resize()
@@ -343,7 +343,7 @@ export class Viewer {
     this.render()
   }
 
-  public setMovementBlocks(mode: ViewerMode, blocks: readonly Block[]): void {
+  private setMovementBlocks(mode: ViewerMode, blocks: readonly Block[]): void {
     this.setMode(mode)
     this.cameraMove = null
     this.clearHover()
@@ -369,10 +369,9 @@ export class Viewer {
     for (const boundary of this.blastBoundaries) {
       boundary.material.clippingPlanes = this.mode === 'inspect' ? [this.clippingPlane] : []
     }
-    this.render()
   }
 
-  public setSelectedBlock(block: Block | null): void {
+  private setSelectedBlock(block: Block | null): void {
     const wasSelected = this.selectedIndex !== null
     const index = block && this.movement ? this.movement.blocks.indexOf(block) : -1
     this.selectedIndex = index >= 0 && this.movement && index < this.movement.count ? index : null
@@ -395,7 +394,6 @@ export class Viewer {
       this.updateSelection()
       if (wasSelected && this.savedCamera) this.frameSection()
     }
-    this.render()
   }
 
   public setMovementProgress(progress: number): void {
@@ -403,7 +401,7 @@ export class Viewer {
     this.movement?.setProgress(this.movementProgress)
     this.blastBoundaries[0].material.opacity = 0.4 * (1 - this.movementProgress)
     this.blastBoundaries[1].material.opacity = 0.4 * this.movementProgress
-    this.updateSurveySurfaces()
+    this.surveyLayer.setProgress(this.movementProgress, this.mode !== 'model')
     this.clearHover()
     this.updateSelection()
     this.render()
@@ -492,10 +490,7 @@ export class Viewer {
       boundary.geometry.dispose()
       boundary.material.dispose()
     }
-    for (const surface of this.surveySurfaces) {
-      surface.geometry.dispose()
-      surface.material.dispose()
-    }
+    this.surveyLayer.dispose()
     this.blastHoleLines.geometry.dispose()
     this.blastHoleCollars.geometry.dispose()
     this.blastHoleLines.material.dispose()
@@ -518,7 +513,6 @@ export class Viewer {
     this.mesh.geometry.dispose()
     this.material.dispose()
     this.scene.clear()
-    this.surveyScene.clear()
     this.renderer.dispose()
     this.renderer.domElement.remove()
   }
@@ -660,8 +654,8 @@ export class Viewer {
       }
       this.renderer.autoClear = true
       // Keep the survey underneath the block model and its inspection highlights.
-      if (this.surveySurfaces.some((surface) => surface.visible)) {
-        this.renderer.render(this.surveyScene, this.camera)
+      if (this.surveyLayer.hasVisibleSurfaces) {
+        this.renderer.render(this.surveyLayer, this.camera)
         this.renderer.clearDepth()
         this.renderer.autoClear = false
       }

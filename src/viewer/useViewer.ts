@@ -1,30 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Viewer } from './Viewer'
-import type { ViewerMode } from './Viewer'
+import type { BlockView } from './Viewer'
 import type { BlastData } from '../data/useBlastData'
 import type { BlastHole } from '../data/blastHoles'
-import type { ColourScale } from '../data/blockColours'
-import type { Block, CategorySelection } from '../data/blockModels'
+import type { Block } from '../data/blockModels'
 import type { SurveySurfaces } from '../data/surveySurfaces'
 
-interface ViewerOptions {
+interface ViewerOptions extends BlockView {
   data: BlastData | null
   blastHoles: readonly BlastHole[]
   showBlastHoles: boolean
   showConnections: boolean
   surfaces: SurveySurfaces | null
   showSurfaces: boolean
-  colourScale: ColourScale | undefined
-  mode: ViewerMode
   sidebarOpen: boolean
   slicePosition: number | null
-  selectedBlock: Block | null
   onSelectBlock: (block: Block | null) => void
-  movementBlocks: readonly Block[] | null
-  visibleBlocks: readonly Block[]
-  visibleCount: number
-  movementCount: number
-  categorySelection: CategorySelection | null
   onSliceChange: (position: number) => void
 }
 
@@ -64,20 +55,10 @@ export function useViewer({
   }, [data, surfaces])
 
   useEffect(() => {
-    viewerRef.current?.setMovementBlocks(mode, movementBlocks ?? [])
-  }, [data, mode, movementBlocks])
-
-  useEffect(() => {
-    viewerRef.current?.setVisibleBlocks(visibleBlocks)
-    if (colourScale) viewerRef.current?.setColourScale(colourScale, mode === 'slice' ? categorySelection : null)
-  }, [data, colourScale, mode, categorySelection, visibleBlocks, movementBlocks])
-
-  // Dragging a grade cutoff can change the counts without rebuilding the meshes.
-  useEffect(() => viewerRef.current?.setBlockCounts(visibleCount, movementCount), [data, mode, movementBlocks, visibleBlocks, visibleCount, movementCount])
-
-  useEffect(() => {
-    viewerRef.current?.setSelectedBlock(mode === 'inspect' ? selectedBlock : null)
-  }, [data, mode, movementBlocks, selectedBlock])
+    viewerRef.current?.setBlockView({
+      mode, movementBlocks, visibleBlocks, visibleCount, movementCount, colourScale, categorySelection, selectedBlock,
+    })
+  }, [data, mode, movementBlocks, visibleBlocks, visibleCount, movementCount, colourScale, categorySelection, selectedBlock])
 
   useEffect(() => {
     const viewer = viewerRef.current
