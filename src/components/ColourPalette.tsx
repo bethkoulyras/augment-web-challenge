@@ -7,6 +7,8 @@ import type { ColourScale } from "../data/blockColours";
 interface ColourPaletteProps {
   scale: ColourScale;
   gradeFilter: GradeFilter | null;
+  categoryCode: number | null;
+  onCategoryCodeChange: (value: number | null) => void;
   children?: ReactNode;
   collapsed: boolean;
   onToggle: () => void;
@@ -16,7 +18,9 @@ interface ColourPaletteProps {
 const format = (value: number): string =>
   value.toLocaleString(undefined, { maximumFractionDigits: 3 });
 
-export default function ColourPalette({ scale, onChange, collapsed, onToggle, gradeFilter, children }: ColourPaletteProps) {
+const codeButton = "flex cursor-pointer items-center gap-2 rounded-md border border-neutral-700 bg-neutral-800/40 px-3 py-2 text-left text-neutral-300 hover:bg-neutral-800 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:border-neutral-400 aria-pressed:bg-neutral-700 aria-pressed:text-white";
+
+export default function ColourPalette({ scale, onChange, collapsed, onToggle, gradeFilter, categoryCode, onCategoryCodeChange, children }: ColourPaletteProps) {
   const categorical = scale.kind === "category";
   const fields = categorical ? categoryFields : scale.kind === "grade" ? gradeFields : [];
 
@@ -44,7 +48,7 @@ export default function ColourPalette({ scale, onChange, collapsed, onToggle, gr
           className="grid grid-cols-3 gap-1 rounded-lg bg-neutral-950 p-1"
         >
           {([
-            ["grade", "Grades", gradeFilter?.field ?? gradeFields[0]],
+            ["grade", "Grades", gradeFields[0]],
             ["category", "Categories", categoryFields[0]],
             ["movement", "Movement", "movementDistance"],
           ] as const).map(([kind, label, field]) => (
@@ -83,54 +87,58 @@ export default function ColourPalette({ scale, onChange, collapsed, onToggle, gr
             ))}
           </div>
         )}
-        {scale.kind === "grade" && children}
-      </div>
-      {(collapsed || scale.kind !== "grade") && gradeFilter && (
-        <p className="text-neutral-400">Filter: {gradeFilter.field} ≥ {format(gradeFilter.minimum)}</p>
-      )}
-
-      <div
-        aria-label="Colour legend"
-        className="space-y-3 border-t border-white/10 pt-4"
-      >
-        {scale.kind === "category" ? (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-            {scale.entries.map((entry) => (
-              <div key={entry.value} className="flex items-center gap-2">
-                <span
-                  aria-hidden="true"
-                  className="h-2.5 w-2.5 rounded-sm"
-                  style={{ background: colourCss(entry.colour) }}
-                />
-                <span>Code {format(entry.value)}</span>
-              </div>
+        {children}
+        {scale.kind === "category" && (
+          <div role="group" aria-label="Category codes" className="grid grid-cols-2 gap-2 border-t border-white/10 pt-4">
+            <button
+              type="button"
+              aria-pressed={categoryCode === null}
+              onClick={() => onCategoryCodeChange(null)}
+              className={codeButton + " col-span-2 justify-center"}
+            >
+              All codes
+            </button>
+            {scale.entries.map(({ value, colour }) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={categoryCode === value}
+                onClick={() => onCategoryCodeChange(categoryCode === value ? null : value)}
+                className={codeButton}
+              >
+                <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: colourCss(colour) }} />
+                Code {format(value)}
+              </button>
             ))}
-          </div>
-        ) : scale.min === null || scale.max === null ? (
-          <p>No values available.</p>
-        ) : (
-          <div className="space-y-2">
-            <div
-              aria-hidden="true"
-              className="h-2 rounded-full"
-              style={{
-                background:
-                  "linear-gradient(to right, " +
-                  gradientStops.map(colourCss).join(", ") +
-                  ")",
-              }}
-            />
-            <div className="flex justify-between gap-3 tabular-nums">
-              <span>
-                <span className="text-neutral-500">{scale.kind === "movement" ? format(scale.min) + " m" : "Low"}</span>
-              </span>
-              <span>
-                <span className="text-neutral-500">{scale.kind === "movement" ? format(scale.max) + " m" : "High"}</span>
-              </span>
-            </div>
           </div>
         )}
       </div>
+      {collapsed && gradeFilter && (
+        <p className="text-neutral-400">Minimum {gradeFilter.field} ≥ {format(gradeFilter.minimum)}</p>
+      )}
+      {collapsed && categoryCode !== null && (
+        <p className="text-neutral-400">Code {format(categoryCode)} selected</p>
+      )}
+
+      {scale.kind !== "category" && (
+        <div aria-label="Colour legend" className="space-y-2 border-t border-white/10 pt-4">
+          {scale.min === null || scale.max === null ? (
+            <p>No values available.</p>
+          ) : (
+            <>
+              <div
+                aria-hidden="true"
+                className="h-2 rounded-full"
+                style={{ background: `linear-gradient(to right, ${gradientStops.map(colourCss).join(", ")})` }}
+              />
+              <div className="flex justify-between gap-3 text-neutral-500 tabular-nums">
+                <span>{scale.kind === "movement" ? format(scale.min) + " m" : "Low"}</span>
+                <span>{scale.kind === "movement" ? format(scale.max) + " m" : "High"}</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </section>
   );
 }

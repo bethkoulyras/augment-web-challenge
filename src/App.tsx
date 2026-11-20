@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import SceneViewer from './components/SceneViewer'
 import ColourPalette from './components/ColourPalette'
-import CategoryControls from './components/CategoryControls'
 import GradeFilterControls from './components/GradeFilterControls'
 import CrossSectionPanel from './components/CrossSectionPanel'
 import SectionSlider from './components/SectionSlider'
@@ -9,7 +8,7 @@ import BlockInspector from './components/BlockInspector'
 import SectionSummary from './components/SectionSummary'
 import { createColourScales } from './data/blockColours'
 import { csvFiles } from './data/csvFiles'
-import { createBlockModels, countGradeMatches } from './data/blockModels'
+import { categoryFields, createBlockModels, countGradeMatches } from './data/blockModels'
 import { createBlastBoundarySegments } from './data/blastBoundary'
 import type { BlastBoundaries } from './data/blastBoundary'
 import type { Block, BlockModels, CategorySelection, ColourField, GradeField, GradeFilter } from './data/blockModels'
@@ -29,7 +28,6 @@ export default function App() {
   const [mode, setMode] = useState<ViewerMode>('model')
   const [slicePosition, setSlicePosition] = useState<number | null>(null)
   const [paletteCollapsed, setPaletteCollapsed] = useState(false)
-  const [categoriesCollapsed, setCategoriesCollapsed] = useState(false)
   const [colourField, setColourField] = useState<ColourField>('grade_01')
   const isLoading = loadedCount < csvFiles.length
 
@@ -45,7 +43,7 @@ export default function App() {
     : null, [orderedBlocks, categorySelection])
 
   const modelBlocks = categoryBlocks ?? filteredGrade?.blocks ?? null
-  const modelCount = categoryBlocks ? countGradeMatches(categoryBlocks, gradeFilter) : visibleCount
+  const modelCount = categoryBlocks?.length ?? visibleCount
 
   const sectionBlocks = useMemo(() => {
     if (mode === 'model' || slicePosition === null) return emptyBlocks
@@ -95,7 +93,21 @@ export default function App() {
     const enabled = mode === 'model'
     setMode(enabled ? 'slice' : 'model')
     setPaletteCollapsed(enabled)
-    setCategoriesCollapsed(enabled)
+    setSelectedBlock(null)
+  }
+
+  const changeColourField = (field: ColourField): void => {
+    if (field === colourField) return
+    setColourField(field)
+    setFilteredGrade(null)
+    setCategorySelection(null)
+    if (gradeFilter || categorySelection) setSelectedBlock(null)
+  }
+
+  const changeCategoryCode = (value: number | null): void => {
+    const field = categoryFields.find((category) => category === colourField)
+    if (!field || (categorySelection?.value ?? null) === value) return
+    setCategorySelection(value === null ? null : { field, value })
     setSelectedBlock(null)
   }
 
@@ -122,15 +134,9 @@ export default function App() {
         <>
           <SceneViewer models={models} blastBoundaries={blastBoundaries} colourScale={colourScale} mode={mode} slicePosition={slicePosition} getVisibleBlocks={getVisibleBlocks} getMovementBlocks={getMovementBlocks} visibleCount={visibleCount} movementCount={movementCount} categorySelection={categorySelection} selectedBlock={selectedBlock} onSelectBlock={setSelectedBlock} onSliceChange={setSlicePosition} />
           <div className="absolute top-20 left-6 z-10 flex w-80 max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)]">
-            <ColourPalette scale={colourScale} onChange={(field) => {
-              setColourField(field)
-              if (gradeFilter && field.startsWith('grade_') && field !== gradeFilter.field) {
-                changeGradeFilter(null)
-              }
-            }} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} gradeFilter={gradeFilter}>
+            <ColourPalette scale={colourScale} onChange={changeColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} gradeFilter={gradeFilter} categoryCode={categorySelection?.value ?? null} onCategoryCodeChange={changeCategoryCode}>
               {colourScale.kind === 'grade' && <GradeFilterControls field={colourField as GradeField} scale={colourScale} filter={gradeFilter} onChange={changeGradeFilter} />}
             </ColourPalette>
-            <CategoryControls colourScales={colourScales} selection={categorySelection} collapsed={categoriesCollapsed} onToggle={() => setCategoriesCollapsed((current) => !current)} onChange={(selection) => { setCategorySelection(selection); setSelectedBlock(null) }} />
             {mode !== 'model' && slicePosition !== null && <CrossSectionPanel blocks={trackedBlocks} scale={colourScale} filtered={categorySelection !== null || gradeFilter !== null} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
             {mode === 'inspect' && slicePosition !== null && !selectedBlock && (
               <SectionSlider blocks={models.pre} position={slicePosition} onChange={(position) => { setSlicePosition(position); setSelectedBlock(null) }} />
