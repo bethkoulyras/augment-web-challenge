@@ -1,10 +1,10 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import ColourPalette from './components/ColourPalette'
 import MinimumFilterControls from './components/MinimumFilterControls'
 import MovementSlider from './components/MovementSlider'
 import SliceSidebar from './components/SliceSidebar'
 import ViewerHeader from './components/ViewerHeader'
-import { colourValue, countMinimumMatches, createColourScales } from './data/blockColours'
+import { countMinimumMatches, createColourScales, sortBlocksByColour } from './data/blockColours'
 import { categoryFields } from './data/blockModels'
 import type { Block, CategorySelection, ColourField } from './data/blockModels'
 import { useBlastData } from './data/useBlastData'
@@ -27,14 +27,14 @@ export default function App() {
   const [sidebarFocusRequest, setSidebarFocusRequest] = useState(0)
   const [colourField, setColourField] = useState<ColourField>('grade_01')
   const data = blast.status === 'ready' ? blast.data : null
-  const models = data?.models
+  const allBlocks = data?.blocks ?? emptyBlocks
   const surfacesLoading = showSurfaces && surfaces === null
 
-  const colourScales = useMemo(() => createColourScales(models?.pre ?? emptyBlocks), [models])
+  const colourScales = useMemo(() => createColourScales(allBlocks), [allBlocks])
   const colourScale = colourScales.get(colourField)
   const minimum = minimumFilter?.minimum ?? null
   const filtered = categorySelection !== null || minimum !== null
-  const orderedBlocks = minimumFilter?.blocks ?? models?.pre ?? emptyBlocks
+  const orderedBlocks = minimumFilter?.blocks ?? allBlocks
 
   const visibleCount = countMinimumMatches(orderedBlocks, colourField, minimum)
 
@@ -45,10 +45,11 @@ export default function App() {
   const modelBlocks = categoryBlocks ?? orderedBlocks
   const modelCount = categoryBlocks?.length ?? visibleCount
 
+  const inSection = mode !== 'model'
   const sectionBlocks = useMemo(() => {
-    if (mode === 'model' || slicePosition === null) return emptyBlocks
+    if (!inSection || slicePosition === null) return emptyBlocks
     return orderedBlocks.filter((block) => Math.abs(block.y - slicePosition) <= block.depth / 2 + 0.001)
-  }, [mode, orderedBlocks, slicePosition])
+  }, [inSection, orderedBlocks, slicePosition])
 
   const sectionCohort = useMemo(() => categorySelection
     ? sectionBlocks.filter((block) => block.attributes[categorySelection.field] === categorySelection.value)
@@ -61,8 +62,8 @@ export default function App() {
   const movementBlocks = mode === 'inspect' ? sectionCohort : mode === 'model' ? modelBlocks : null
   const movementCount = mode === 'inspect' ? trackedBlocks.length : movementBlocks ? modelCount : 0
   const firstMovingBlock = useMemo(() => movementBlocks?.findIndex((block) => block.movementDistance > 0) ?? -1, [movementBlocks])
-  // React's development profiler deeply compares changed array props.
-  const getMovementBlocks = useCallback(() => movementBlocks, [movementBlocks])
+  // A token lets playback detect new blocks without receiving the full array.
+  const playbackSource = useMemo(() => Symbol(), [movementBlocks])
 
   const { containerRef, viewerFailed, resetView, setProgress } = useViewer({
     data,
@@ -115,13 +116,8 @@ export default function App() {
   }
 
   const changeMinimum = (minimum: number | null): void => {
-    if (minimum !== null && models) {
-      const sortableValue = (block: Block): number => {
-        const value = colourValue(block, colourField)
-        return value !== null && Number.isFinite(value) ? value : -Infinity
-      }
-      // The renderer hides the suffix by updating its instance count.
-      const blocks = minimumFilter?.blocks ?? [...models.pre].sort((a, b) => sortableValue(b) - sortableValue(a))
+    if (minimum !== null) {
+      const blocks = minimumFilter?.blocks ?? sortBlocksByColour(allBlocks, colourField)
       setMinimumFilter({ minimum, blocks })
     } else {
       setMinimumFilter(null)
@@ -153,7 +149,7 @@ export default function App() {
           <div className={'pointer-events-none z-10 col-span-full row-start-3 w-full sm:absolute sm:right-[var(--viewer-inset)] sm:bottom-[var(--viewer-inset)] sm:w-auto sm:transition-[left] sm:duration-200 sm:ease-out motion-reduce:transition-none ' + (sidebarOpen ? 'sm:left-[var(--viewer-sidebar-offset)]' : 'sm:left-[var(--viewer-inset)]')}>
             <MovementSlider
               mode={mode}
-              getMovementBlocks={getMovementBlocks}
+              playbackSource={playbackSource}
               movementCount={movementCount}
               disabled={firstMovingBlock < 0 || firstMovingBlock >= movementCount}
               onChange={setProgress}
@@ -192,7 +188,7 @@ export default function App() {
             </MovementSlider>
           </div>
           <SliceSidebar
-            models={data.models}
+            allBlocks={allBlocks}
             scale={colourScale}
             filtered={filtered}
             mode={mode}

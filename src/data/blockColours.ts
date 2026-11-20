@@ -1,19 +1,24 @@
 import { categoryFields, gradeFields } from "./blockModels";
 import type { Block, ColourField } from "./blockModels";
 
-export const missingColour = 0x8c939e;
+const missingColour = 0x8c939e;
 export const gradientStops = [0x440154, 0x3b528b, 0x21918c, 0x5ec962, 0xfde725];
 const categoryPalette = [
   0x56b4e9, 0xe69f00, 0x009e73, 0xcc79a7, 0xf0e442, 0x0072b2,
 ];
 
-export type ColourScale = { field: ColourField; missingCount: number } & (
+export type ColourScale = { field: ColourField } & (
   | { kind: "category"; entries: { value: number; colour: number }[] }
   | { kind: "grade" | "movement"; min: number | null; max: number | null }
 );
 
 export const colourValue = (block: Block, field: ColourField): number | null =>
   field === "movementDistance" ? block.movementDistance : block.attributes[field];
+
+export function sortBlocksByColour(blocks: readonly Block[], field: ColourField): Block[] {
+  const value = (block: Block): number => colourValue(block, field) ?? -Infinity;
+  return [...blocks].sort((a, b) => value(b) - value(a));
+}
 
 // Blocks are ordered by descending value, with missing values last.
 export function countMinimumMatches(blocks: readonly Block[], field: ColourField, minimum: number | null): number {
@@ -23,13 +28,13 @@ export function countMinimumMatches(blocks: readonly Block[], field: ColourField
   while (low < high) {
     const middle = Math.floor((low + high) / 2);
     const value = colourValue(blocks[middle], field);
-    if (value !== null && Number.isFinite(value) && value >= minimum) low = middle + 1;
+    if (value !== null && value >= minimum) low = middle + 1;
     else high = middle;
   }
   return low;
 }
 
-export function createColourScale(
+function createColourScale(
   blocks: readonly Block[],
   field: ColourField,
 ): ColourScale {
@@ -37,14 +42,10 @@ export function createColourScale(
   const values = new Set<number>();
   let min = Infinity;
   let max = -Infinity;
-  let missingCount = 0;
 
   for (const block of blocks) {
     const value = colourValue(block, field);
-    if (value === null || !Number.isFinite(value)) {
-      missingCount += 1;
-      continue;
-    }
+    if (value === null) continue;
     if (categorical) values.add(value);
     else {
       min = Math.min(min, value);
@@ -55,7 +56,6 @@ export function createColourScale(
   if (categorical)
     return {
       field,
-      missingCount,
       kind: "category",
       entries: [...values]
         .sort((a, b) => a - b)
@@ -67,7 +67,6 @@ export function createColourScale(
 
   return {
     field,
-    missingCount,
     kind: field === "movementDistance" ? "movement" : "grade",
     min: Number.isFinite(min) ? min : null,
     max: Number.isFinite(max) ? max : null,
@@ -100,10 +99,7 @@ export function colourForValue(
     );
   }
 
-  if (scale.min === null || scale.max === null || gradientStops.length === 0) {
-    return missingColour;
-  }
-  if (gradientStops.length === 1) return gradientStops[0];
+  if (scale.min === null || scale.max === null) return missingColour;
 
   const t = scale.min === scale.max ? 0.5 : clamp((value - scale.min) / (scale.max - scale.min), 0, 1);
   const maxIndex = gradientStops.length - 1;

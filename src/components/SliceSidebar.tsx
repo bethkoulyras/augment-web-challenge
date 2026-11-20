@@ -5,11 +5,11 @@ import CrossSectionPanel from './CrossSectionPanel'
 import SectionSlider from './SectionSlider'
 import SectionSummary from './SectionSummary'
 import type { ColourScale } from '../data/blockColours'
-import type { Block, BlockModels } from '../data/blockModels'
+import type { Block } from '../data/blockModels'
 import type { ViewerMode } from '../viewer/Viewer'
 
 interface SliceSidebarProps {
-  models: BlockModels
+  allBlocks: readonly Block[]
   scale: ColourScale
   filtered: boolean
   mode: ViewerMode
@@ -36,7 +36,7 @@ const sliceIcon = (
 )
 
 export default function SliceSidebar({
-  models, scale, filtered, mode, open, focusRequest, blocks, totalCount, slicePosition,
+  allBlocks, scale, filtered, mode, open, focusRequest, blocks, totalCount, slicePosition,
   selectedBlock, showConnections, onModeChange, onSliceChange, onClearBlock, onToggleConnections, children,
 }: SliceSidebarProps) {
   const sidebarRef = useRef<HTMLDivElement>(null)
@@ -83,7 +83,7 @@ export default function SliceSidebar({
     }
   }, [])
 
-  const northingSlider = <SectionSlider blocks={models.pre} position={slicePosition} onChange={onSliceChange} />
+  const northingSlider = <SectionSlider blocks={allBlocks} position={slicePosition} onChange={onSliceChange} />
 
   return (
     <aside
@@ -140,7 +140,7 @@ export default function SliceSidebar({
                       </button>
                     </div>
                     {selectedBlock ? (
-                      <BlockInspector block={selectedBlock} models={models} field={scale.field} onClear={onClearBlock} />
+                      <BlockInspector block={selectedBlock} field={scale.field} />
                     ) : (
                       <>
                         <SectionSummary blocks={blocks} totalCount={totalCount} />

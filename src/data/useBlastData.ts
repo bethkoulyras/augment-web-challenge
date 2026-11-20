@@ -4,13 +4,13 @@ import { createBlastBoundarySegments } from './blastBoundary'
 import type { BlastBoundaries } from './blastBoundary'
 import { createBlastHoles } from './blastHoles'
 import type { BlastHole } from './blastHoles'
-import { createBlockModels } from './blockModels'
-import type { BlockModels } from './blockModels'
+import { parseBlocks } from './blockModels'
+import type { Block } from './blockModels'
 import { loadSurveySurfaces } from './surveySurfaces'
 import type { SurveySurfaces } from './surveySurfaces'
 
 export interface BlastData {
-  models: BlockModels
+  blocks: readonly Block[]
   boundaries: BlastBoundaries
 }
 
@@ -40,8 +40,7 @@ export function useBlastData() {
       try {
         const rows = await loadCsv('/1_mbm.csv', signal)
         if (signal.aborted) return
-        const models = createBlockModels(rows)
-        if (!models.pre.length) throw new Error('The block model file contains no usable blocks.')
+        const blocks = parseBlocks(rows)
 
         stage = 'blast boundaries'
         setBlast({ status: 'loading', stage })
@@ -49,7 +48,7 @@ export function useBlastData() {
           loadCsv('/1_pre_string.csv', signal).then(createBlastBoundarySegments),
           loadCsv('/1_pst_string.csv', signal).then(createBlastBoundarySegments),
         ])
-        if (!signal.aborted) setBlast({ status: 'ready', data: { models, boundaries: { pre, post } } })
+        if (!signal.aborted) setBlast({ status: 'ready', data: { blocks, boundaries: { pre, post } } })
       } catch (error) {
         if (!signal.aborted) {
           const message = error instanceof Error ? error.message : 'Could not load the CSV.'

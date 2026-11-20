@@ -12,7 +12,7 @@ function GradeFilter() {
 
   return (
     <MinimumFilterControls
-      scale={{ kind: 'grade', field: 'grade_01', min: 0, max: 10, missingCount: 0 }}
+      scale={{ kind: 'grade', field: 'grade_01', min: 0, max: 10 }}
       minimum={minimum}
       onChange={setMinimum}
     />

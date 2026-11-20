@@ -1,3 +1,4 @@
+import { csvNumber } from '../utils/loadCsv'
 import type { CsvRow } from '../utils/loadCsv'
 
 export const gradeFields = [
@@ -5,16 +6,19 @@ export const gradeFields = [
   'grade_07', 'grade_08', 'grade_09', 'grade_10', 'grade_11',
 ] as const
 export const categoryFields = ['cat_1', 'cat_2', 'cat_3'] as const
-export type GradeField = typeof gradeFields[number]
-export type AttributeField = GradeField | typeof categoryFields[number]
+type AttributeField = typeof gradeFields[number] | typeof categoryFields[number]
 export type ColourField = AttributeField | 'movementDistance'
 const attributeFields = [...gradeFields, ...categoryFields]
 
-export interface Block {
-  id: number
+export interface Position {
   x: number
   y: number
   z: number
+}
+
+export interface Block extends Position {
+  id: number
+  predicted: Position
   width: number
   depth: number
   height: number
@@ -22,39 +26,42 @@ export interface Block {
   attributes: Record<AttributeField, number | null>
 }
 
-export interface BlockModels {
-  pre: Block[]
-  post: Block[]
-}
-
 export interface CategorySelection {
   field: typeof categoryFields[number]
   value: number
 }
 
-export type ModelView = keyof BlockModels
+export function parseBlocks(rows: readonly CsvRow[]): Block[] {
+  const blocks: Block[] = []
 
-export function createBlockModels(rows: CsvRow[]): BlockModels {
-  const models: BlockModels = { pre: [], post: [] }
+  for (const [index, row] of rows.entries()) {
+    if (!row.IJK?.trim() || Number(row.PREN) !== 1) continue
 
-  for (const row of rows) {
-    if (!row.IJK || Number(row.PREN) !== 1) continue
-
-    const attributes = Object.fromEntries(attributeFields.map((field) => [field, row[field]?.trim() ? Number(row[field]) : null])) as Record<AttributeField, number | null>
-    const block: Block = {
-      id: Number(row.IJK),
-      x: Number(row.XC),
-      y: Number(row.YC),
-      z: Number(row.ZC),
-      width: Number(row.Xinc),
-      depth: Number(row.Yinc),
-      height: Number(row.Zinc),
-      movementDistance: Number(row.DISP_A),
-      attributes,
+    const id = csvNumber(row.IJK)
+    const x = csvNumber(row.XC)
+    const y = csvNumber(row.YC)
+    const z = csvNumber(row.ZC)
+    const predicted = { x: csvNumber(row.XF), y: csvNumber(row.YF), z: csvNumber(row.ZF) }
+    const width = csvNumber(row.Xinc)
+    const depth = csvNumber(row.Yinc)
+    const height = csvNumber(row.Zinc)
+    const movementDistance = csvNumber(row.DISP_A)
+    if (
+      !Number.isSafeInteger(id) ||
+      ![x, y, z, predicted.x, predicted.y, predicted.z, width, depth, height, movementDistance].every(Number.isFinite) ||
+      width <= 0 || depth <= 0 || height <= 0 || movementDistance < 0
+    ) {
+      throw new Error('Invalid geometry or movement in block model record ' + (index + 1) + '.')
     }
-    models.pre.push(block)
-    models.post.push({ ...block, x: Number(row.XF), y: Number(row.YF), z: Number(row.ZF) })
+
+    const attributes = {} as Block['attributes']
+    for (const field of attributeFields) {
+      const value = csvNumber(row[field])
+      attributes[field] = Number.isFinite(value) ? value : null
+    }
+    blocks.push({ id, x, y, z, predicted, width, depth, height, movementDistance, attributes })
   }
 
-  return models
+  if (!blocks.length) throw new Error('The block model file contains no usable blocks.')
+  return blocks
 }

@@ -37,7 +37,7 @@ import { blockColourAttribute } from './blockColourAttribute'
 import type { ColourScale } from '../data/blockColours'
 import type { BlastBoundaries } from '../data/blastBoundary'
 import type { BlastHole } from '../data/blastHoles'
-import type { Block, BlockModels, CategorySelection } from '../data/blockModels'
+import type { Block, CategorySelection, Position } from '../data/blockModels'
 import type { SurveySurfaces } from '../data/surveySurfaces'
 
 export type ViewerMode = 'model' | 'slice' | 'inspect'
@@ -56,10 +56,10 @@ export class Viewer {
   private readonly clippingPlane = new Plane(new Vector3(0, 0, -1), 0)
   private readonly mesh: InstancedMesh
   private visibleBlocks: readonly Block[] = []
-  private readonly postById = new Map<number, Block>()
   private readonly origin = new Vector3()
   private readonly renderer: WebGLRenderer
   private readonly controls: OrbitControls
+  private readonly events = new AbortController()
   private readonly resizeObserver: ResizeObserver
   private readonly blastBoundaries = [1, 0].map((opacity) => new LineSegments(
     new BufferGeometry(),
@@ -95,7 +95,7 @@ export class Viewer {
   private readonly pointerDownPosition = new Vector2()
   private readonly raycaster = new Raycaster()
   private readonly pointer = new Vector2()
-  private slicer: SlicePlane | null = null
+  private readonly slicer: SlicePlane
   private savedCamera: { position: Vector3; target: Vector3 } | null = null
   private sidebarWidth = 0
   private sidebarProgress = 1
@@ -112,13 +112,12 @@ export class Viewer {
 
   constructor(
     private readonly container: HTMLElement,
-    private readonly models: BlockModels,
+    private readonly blocks: readonly Block[],
     private readonly onSliceChange: (position: number) => void,
     private readonly onSelectBlock: (block: Block | null) => void,
   ) {
-    for (const block of models.post) this.postById.set(block.id, block)
-    const first = models.pre[0]
-    if (first) this.origin.set(first.x, first.y, first.z)
+    const first = blocks[0]
+    this.origin.set(first.x, first.y, first.z)
 
     this.renderer = new WebGLRenderer({ antialias: true, alpha: true })
     this.renderer.localClippingEnabled = true
@@ -128,14 +127,15 @@ export class Viewer {
     this.controls.addEventListener('change', this.render)
     this.controls.addEventListener('change', this.clearHover)
     this.controls.addEventListener('start', this.cancelCameraMove)
-    this.renderer.domElement.addEventListener('pointerdown', this.pointerDown)
-    this.renderer.domElement.addEventListener('click', this.clickBlock)
-    this.renderer.domElement.addEventListener('pointermove', this.pointerMove)
-    this.renderer.domElement.addEventListener('pointerleave', this.clearHover)
+    const { signal } = this.events
+    this.renderer.domElement.addEventListener('pointerdown', this.pointerDown, { signal })
+    this.renderer.domElement.addEventListener('click', this.clickBlock, { signal })
+    this.renderer.domElement.addEventListener('pointermove', this.pointerMove, { signal })
+    this.renderer.domElement.addEventListener('pointerleave', this.clearHover, { signal })
 
     this.configureBlockHighlight()
-    this.mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), this.material, models.pre.length)
-    this.setVisibleBlocks(models.pre)
+    this.mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), this.material, blocks.length)
+    this.setVisibleBlocks(blocks)
     this.mesh.computeBoundingBox()
     this.mesh.computeBoundingSphere()
     const light = new DirectionalLight(0xffffff, 1.8)
@@ -166,10 +166,7 @@ export class Viewer {
     this.scene.add(this.mesh, this.hoverHighlight, this.selectionHighlight, ambientLight, light)
 
     const bounds = this.mesh.boundingBox!
-    for (const boundary of this.blastBoundaries) {
-      boundary.visible = false
-      boundary.renderOrder = 2
-    }
+    for (const boundary of this.blastBoundaries) boundary.renderOrder = 2
     this.scene.add(...this.blastBoundaries)
     for (const surface of this.surveySurfaces) surface.visible = false
     this.surveyScene.add(...this.surveySurfaces, ambientLight.clone(), light.clone())
@@ -183,9 +180,9 @@ export class Viewer {
     this.resizeObserver.observe(container)
     this.resize()
     this.frameBounds(bounds)
-    this.slicer = new SlicePlane(bounds, first?.depth ?? 1, this.controls, (sceneZ) => {
+    this.slicer = new SlicePlane(bounds, first.depth, this.controls, (sceneZ) => {
       this.setSlicePosition(this.origin.y - sceneZ)
-      this.onSliceChange(this.origin.y - this.slicer!.position.z)
+      this.onSliceChange(this.origin.y - this.slicer.position.z)
     })
     this.scene.add(this.slicer)
     const initialPosition = this.origin.y - this.slicer.position.z
@@ -215,7 +212,6 @@ export class Viewer {
       this.movement.setCount(movementCount)
       if (movementCount > previousCount) this.movement.setProgress(this.movementProgress, previousCount)
     }
-    this.updateBlastBoundaryVisibility()
     this.clearHover()
     this.render()
   }
@@ -229,11 +225,6 @@ export class Viewer {
       )))
     })
     this.render()
-  }
-
-  private updateBlastBoundaryVisibility(): void {
-    const visible = this.mode !== 'model' || this.movement !== null || this.mesh.count < this.models.pre.length
-    for (const boundary of this.blastBoundaries) boundary.visible = visible
   }
 
   public setSurveySurfaces(surfaces: SurveySurfaces): void {
@@ -311,7 +302,7 @@ export class Viewer {
     if (mode === this.mode) return
     const inspecting = mode === 'inspect'
     this.movementProgress = 0
-    this.slicer?.setEnabled(mode === 'slice')
+    this.slicer.setEnabled(mode === 'slice')
     this.sliceActive.value = mode === 'slice'
     this.mode = mode
     this.material.clippingPlanes = inspecting ? [this.clippingPlane] : []
@@ -335,7 +326,6 @@ export class Viewer {
   }
 
   public setSlicePosition(position: number): void {
-    if (!this.slicer) return
     const previousZ = this.sliceZ.value
     this.slicer.moveTo(this.origin.y - position)
     const sceneZ = this.slicer.position.z
@@ -362,19 +352,19 @@ export class Viewer {
     this.selectedIndex = null
     this.movementLine.visible = false
     if (blocks.length) {
-      const post = blocks.map((block) => this.postById.get(block.id)!)
-      this.movement = new SectionMovement(blocks, post, this.origin, this.mode === 'inspect')
+      this.movement = new SectionMovement(blocks, this.origin, this.mode === 'inspect')
+      // setBlockCounts initializes the transforms for the visible instances.
+      this.movement.setCount(0)
       this.scene.add(this.movement)
     }
     this.setMovementProgress(!blocks.length && this.mode !== 'inspect' ? 0 : this.movementProgress)
     const focused = this.movement !== null || this.mode === 'inspect'
-    this.mesh.visible = this.mode !== 'model' || blocks !== this.models.pre || this.movement === null
+    this.mesh.visible = this.mode !== 'model' || blocks !== this.blocks || this.movement === null
     this.material.transparent = focused
     this.material.opacity = focused ? 0.01 : 1
     this.material.depthWrite = !focused
     this.material.color.setScalar(focused ? 0.1 : 1)
     this.material.needsUpdate = true
-    this.updateBlastBoundaryVisibility()
     for (const boundary of this.blastBoundaries) {
       boundary.material.clippingPlanes = this.mode === 'inspect' ? [this.clippingPlane] : []
     }
@@ -383,22 +373,23 @@ export class Viewer {
 
   public setSelectedBlock(block: Block | null): void {
     const wasSelected = this.selectedIndex !== null
-    const index = block && this.movement ? this.movement.pre.indexOf(block) : -1
-    this.selectedIndex = index === -1 ? null : index
+    const index = block && this.movement ? this.movement.blocks.indexOf(block) : -1
+    this.selectedIndex = index >= 0 && this.movement && index < this.movement.count ? index : null
     this.movementLine.visible = false
     if (this.selectedIndex !== null && this.movement) {
-      const pre = this.movement.pre[this.selectedIndex]
-      const post = this.movement.post[this.selectedIndex]
-      const start = this.blockBounds(pre).getCenter(new Vector3())
-      const end = this.blockBounds(post).getCenter(new Vector3())
-      this.originalPositionHighlight.box.copy(this.blockBounds(pre))
-      this.otherPositionHighlight.box.copy(this.blockBounds(post))
+      const selected = this.movement.blocks[this.selectedIndex]
+      const pre = this.blockBounds(selected)
+      const post = this.blockBounds(selected, selected.predicted)
+      const start = pre.getCenter(new Vector3())
+      const end = post.getCenter(new Vector3())
+      this.originalPositionHighlight.box.copy(pre)
+      this.otherPositionHighlight.box.copy(post)
       if (!start.equals(end)) {
         this.movementLine.geometry.setFromPoints([start, end])
         this.movementLine.visible = true
       }
       this.updateSelection()
-      this.frameBlocks([pre, post])
+      this.frameBoxes([pre, post])
     } else {
       this.updateSelection()
       if (wasSelected && this.savedCamera) this.frameSection()
@@ -434,9 +425,9 @@ export class Viewer {
     }
   }
 
-  private blockBounds(block: Block): Box3 {
+  private blockBounds(block: Block, position: Position = block): Box3 {
     return new Box3().setFromCenterAndSize(
-      new Vector3(block.x - this.origin.x, block.z - this.origin.z, this.origin.y - block.y),
+      new Vector3(position.x - this.origin.x, position.z - this.origin.z, this.origin.y - position.y),
       new Vector3(block.width, block.height, block.depth),
     )
   }
@@ -455,10 +446,9 @@ export class Viewer {
     this.controls.update()
   }
 
-  private frameBlocks(blocks: readonly Block[]): void {
+  private frameBoxes(boxes: readonly Box3[]): void {
     const { clientWidth: width, clientHeight: height } = this.container
-    if (!blocks.length || !width || !height) return
-    const boxes = blocks.map((block) => this.blockBounds(block))
+    if (!boxes.length || !width || !height) return
     const bounds = new Box3()
     for (const box of boxes) bounds.union(box)
     const centre = bounds.getCenter(new Vector3())
@@ -550,15 +540,12 @@ export class Viewer {
     this.movementLine.geometry.dispose()
     this.movementLine.material.dispose()
     this.movement?.dispose()
-    this.slicer?.dispose()
+    this.slicer.dispose()
     this.resizeObserver.disconnect()
     this.controls.removeEventListener('change', this.render)
     this.controls.removeEventListener('change', this.clearHover)
     this.controls.removeEventListener('start', this.cancelCameraMove)
-    this.renderer.domElement.removeEventListener('pointerdown', this.pointerDown)
-    this.renderer.domElement.removeEventListener('click', this.clickBlock)
-    this.renderer.domElement.removeEventListener('pointermove', this.pointerMove)
-    this.renderer.domElement.removeEventListener('pointerleave', this.clearHover)
+    this.events.abort()
     this.controls.dispose()
     this.mesh.dispose()
     this.mesh.geometry.dispose()
@@ -598,7 +585,7 @@ export class Viewer {
     const distance = Math.hypot(event.clientX - this.pointerDownPosition.x, event.clientY - this.pointerDownPosition.y)
     if (distance > 4) return
     const index = this.pick(event)
-    this.onSelectBlock(index === null ? null : this.movement.pre[index])
+    this.onSelectBlock(index === null ? null : this.movement.blocks[index])
   }
 
   private readonly pointerMove = (event: PointerEvent): void => {
@@ -622,7 +609,9 @@ export class Viewer {
   }
 
   public frameSection(): void {
-    if (this.movement) this.frameBlocks([...this.movement.pre.slice(0, this.movement.count), ...this.movement.post.slice(0, this.movement.count)])
+    if (!this.movement) return
+    const blocks = this.movement.blocks.slice(0, this.movement.count)
+    this.frameBoxes(blocks.flatMap((block) => [this.blockBounds(block), this.blockBounds(block, block.predicted)]))
   }
 
   public resetView(): void {

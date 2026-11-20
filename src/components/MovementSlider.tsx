@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import type { Block } from '../data/blockModels'
 import type { ViewerMode } from '../viewer/Viewer'
 
 interface MovementSliderProps {
   mode: ViewerMode
-  getMovementBlocks: () => readonly Block[] | null
+  playbackSource: symbol
   movementCount: number
   disabled: boolean
   onChange: (progress: number) => void
   children: ReactNode
 }
 
-export default function MovementSlider({ mode, getMovementBlocks, movementCount, disabled, onChange, children }: MovementSliderProps) {
+export default function MovementSlider({ mode, playbackSource, movementCount, disabled, onChange, children }: MovementSliderProps) {
   const [progress, setProgress] = useState(0)
   const [playing, setPlaying] = useState(false)
   const progressRef = useRef(0)
@@ -34,7 +33,7 @@ export default function MovementSlider({ mode, getMovementBlocks, movementCount,
     setPlaying(false)
   }, [])
 
-  useEffect(pause, [pause, getMovementBlocks, movementCount, mode])
+  useEffect(pause, [pause, playbackSource, movementCount, mode])
 
   useEffect(() => {
     progressRef.current = 0

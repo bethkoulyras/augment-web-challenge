@@ -1,66 +1,45 @@
-import { useMemo } from 'react'
 import { colourValue } from '../data/blockColours'
-import type { Block, BlockModels, ColourField } from '../data/blockModels'
+import type { Block, ColourField } from '../data/blockModels'
 
 interface BlockInspectorProps {
-  block: Block | null
-  models: BlockModels
+  block: Block
   field: ColourField
-  onClear: () => void
 }
 
-export default function BlockInspector({ block, models, field, onClear }: BlockInspectorProps) {
-  const value = block ? colourValue(block, field) : null
-  const positions = useMemo(() => {
-    if (!block) return null
-    const pre = models.pre.find((candidate) => candidate.id === block.id)
-    const post = models.post.find((candidate) => candidate.id === block.id)
-    return pre && post ? { pre, post } : null
-  }, [models, block])
-  const distance = block?.movementDistance ?? null
+export default function BlockInspector({ block, field }: BlockInspectorProps) {
+  const value = colourValue(block, field)
 
   return (
     <section aria-label="Block inspector" className="space-y-3 p-4">
-      {block ? (
-        <>
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-medium text-neutral-100">Block {block.id}</h2>
-            <button type="button" onClick={onClear} className="cursor-pointer rounded text-neutral-400 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300">Clear selection</button>
-          </div>
-          {positions && distance !== null && (
-            <>
-              <div>
-                <p className="text-neutral-400">Predicted movement</p>
-                <p className="mt-1 text-3xl leading-tight font-semibold tracking-tight text-neutral-100 tabular-nums">{Number.isFinite(distance) ? distance.toFixed(2) + ' m' : '—'}</p>
-              </div>
-              <table className="w-full text-right tabular-nums">
-                <caption className="mb-2 text-left text-neutral-400">Coordinates (m)</caption>
-                <thead>
-                  <tr>
-                    <th scope="col" className="sr-only">Axis</th>
-                    <th scope="col" className="pb-2 font-normal">Pre-blast</th>
-                    <th scope="col" className="pb-2 font-normal">Predicted post-blast</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {([['x', 'Easting'], ['y', 'Northing'], ['z', 'Elevation']] as const).map(([axis, label]) => (
-                    <tr key={axis}>
-                      <th scope="row" className="py-1 text-left font-normal text-neutral-400">{label}</th>
-                      <td>{positions.pre[axis].toFixed(2)}</td>
-                      <td>{positions.post[axis].toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
-          {field !== 'movementDistance' && <dl className="flex justify-between gap-3 border-t border-white/10 pt-3 font-mono">
-            <dt className="text-neutral-400">{field}</dt>
-            <dd>{value === null || !Number.isFinite(value) ? '—' : value.toLocaleString(undefined, { maximumFractionDigits: 3 })}</dd>
-          </dl>}
-        </>
-      ) : (
-        <p>Click a block in the section to inspect it.</p>
+      <h2 className="text-sm font-medium text-neutral-100">Block {block.id}</h2>
+      <div>
+        <p className="text-neutral-400">Predicted movement</p>
+        <p className="mt-1 text-3xl leading-tight font-semibold tracking-tight text-neutral-100 tabular-nums">{block.movementDistance.toFixed(2)} m</p>
+      </div>
+      <table className="w-full text-right tabular-nums">
+        <caption className="mb-2 text-left text-neutral-400">Coordinates (m)</caption>
+        <thead>
+          <tr>
+            <th scope="col" className="sr-only">Axis</th>
+            <th scope="col" className="pb-2 font-normal">Pre-blast</th>
+            <th scope="col" className="pb-2 font-normal">Predicted post-blast</th>
+          </tr>
+        </thead>
+        <tbody>
+          {([['x', 'Easting'], ['y', 'Northing'], ['z', 'Elevation']] as const).map(([axis, label]) => (
+            <tr key={axis}>
+              <th scope="row" className="py-1 text-left font-normal text-neutral-400">{label}</th>
+              <td>{block[axis].toFixed(2)}</td>
+              <td>{block.predicted[axis].toFixed(2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {field !== 'movementDistance' && (
+        <dl className="flex justify-between gap-3 border-t border-white/10 pt-3 font-mono">
+          <dt className="text-neutral-400">{field}</dt>
+          <dd>{value === null ? '—' : value.toLocaleString(undefined, { maximumFractionDigits: 3 })}</dd>
+        </dl>
       )}
     </section>
   )

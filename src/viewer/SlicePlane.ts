@@ -17,7 +17,6 @@ import {
 import type { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 
 export class SlicePlane extends Group {
-  private readonly bounds: Box3
   private readonly canvas: HTMLCanvasElement
   private readonly events = new AbortController()
   private readonly raycaster = new Raycaster()
@@ -45,20 +44,31 @@ export class SlicePlane extends Group {
   )
 
   constructor(
-    bounds: Box3,
+    private readonly bounds: Box3,
     public readonly step: number,
     private readonly controls: OrbitControls,
     private readonly onDrag: (position: number) => void,
   ) {
     super()
-    this.bounds = bounds.clone()
     this.canvas = controls.domElement as HTMLCanvasElement
     this.plane.renderOrder = 2
     this.frame.renderOrder = 1
     this.add(this.plane, this.frame)
     this.visible = false
-    this.setBounds(bounds)
-    this.moveTo(bounds.getCenter(new Vector3()).z)
+    const size = bounds.getSize(new Vector3())
+    const centre = bounds.getCenter(new Vector3())
+    this.position.copy(centre)
+    this.plane.scale.set(size.x + 12, size.y + 24, step)
+    const halfWidth = this.plane.scale.x / 2
+    const halfHeight = this.plane.scale.y / 2
+    this.frame.geometry.setFromPoints([
+      new Vector3(-halfWidth, -halfHeight, 0),
+      new Vector3(halfWidth, -halfHeight, 0),
+      new Vector3(halfWidth, halfHeight, 0),
+      new Vector3(-halfWidth, halfHeight, 0),
+      new Vector3(-halfWidth, -halfHeight, 0),
+    ])
+    this.moveTo(centre.z)
 
     const { signal } = this.events
     this.canvas.addEventListener('pointerdown', this.pointerDown, { capture: true, signal })
@@ -81,26 +91,6 @@ export class SlicePlane extends Group {
       this.bounds.min.z + this.step / 2,
       this.bounds.max.z - this.step / 2,
     )
-  }
-
-  public setBounds(bounds: Box3): void {
-    this.bounds.copy(bounds)
-    const size = bounds.getSize(new Vector3())
-    const centre = bounds.getCenter(new Vector3())
-    this.position.x = centre.x
-    this.position.y = centre.y
-    this.plane.scale.set(size.x + 12, size.y + 24, this.step)
-    const halfWidth = this.plane.scale.x / 2
-    const halfHeight = this.plane.scale.y / 2
-    this.frame.geometry.dispose()
-    this.frame.geometry = new BufferGeometry().setFromPoints([
-      new Vector3(-halfWidth, -halfHeight, 0),
-      new Vector3(halfWidth, -halfHeight, 0),
-      new Vector3(halfWidth, halfHeight, 0),
-      new Vector3(-halfWidth, halfHeight, 0),
-      new Vector3(-halfWidth, -halfHeight, 0),
-    ])
-    this.moveTo(this.position.z)
   }
 
   public dispose(): void {

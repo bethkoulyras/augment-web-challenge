@@ -1,7 +1,7 @@
 import { Matrix4, Vector3 } from 'three'
 import { expect, test, vi } from 'vitest'
-import { createBlockModels } from '../src/data/blockModels'
-import { countMinimumMatches } from '../src/data/blockColours'
+import { parseBlocks } from '../src/data/blockModels'
+import { countMinimumMatches, sortBlocksByColour } from '../src/data/blockColours'
 import { createBlastBoundarySegments } from '../src/data/blastBoundary'
 import { SectionMovement } from '../src/viewer/SectionMovement'
 import { loadCsv } from '../src/utils/loadCsv'
@@ -23,29 +23,34 @@ const blockRow = {
 }
 
 test('OMP rows produce paired pre-blast and predicted post-blast blocks', () => {
-  const { pre, post } = createBlockModels([
+  const blocks = parseBlocks([
     blockRow,
     { ...blockRow, IJK: '102', PREN: '0' },
     { ...blockRow, IJK: '' },
     { ...blockRow, IJK: '103', XC: '12', XF: '16' },
   ])
 
-  expect(pre.map(({ id, x, y, z }) => [id, x, y, z])).toEqual([
+  expect(blocks.map(({ id, x, y, z }) => [id, x, y, z])).toEqual([
     [101, 10, 20, 30],
     [103, 12, 20, 30],
   ])
-  expect(post.map(({ id, x, y, z }) => [id, x, y, z])).toEqual([
-    [101, 14, 26, 32],
-    [103, 16, 26, 32],
+  expect(blocks.map(({ predicted }) => predicted)).toEqual([
+    { x: 14, y: 26, z: 32 },
+    { x: 16, y: 26, z: 32 },
   ])
-  expect(post[0].movementDistance).toBe(7.48)
-  expect(post[0].attributes.grade_01).toBe(0.6)
-  expect(post[0].attributes.grade_02).toBeNull()
+  expect(blocks[0].movementDistance).toBe(7.48)
+  expect(blocks[0].attributes.grade_01).toBe(0.6)
+  expect(blocks[0].attributes.grade_02).toBeNull()
+})
+
+test('the block loader rejects missing coordinates and invalid dimensions', () => {
+  expect(() => parseBlocks([{ ...blockRow, XF: '' }])).toThrow('Invalid geometry or movement')
+  expect(() => parseBlocks([{ ...blockRow, Xinc: '0' }])).toThrow('Invalid geometry or movement')
 })
 
 test('playback interpolates the block position while preserving its dimensions', ({ onTestFinished }) => {
-  const { pre, post } = createBlockModels([blockRow])
-  const movement = new SectionMovement(pre, post, new Vector3(10, 20, 30), false)
+  const blocks = parseBlocks([blockRow])
+  const movement = new SectionMovement(blocks, new Vector3(10, 20, 30), false)
   onTestFinished(() => movement.dispose())
 
   const matrix = new Matrix4()
@@ -63,18 +68,20 @@ test('playback interpolates the block position while preserving its dimensions',
   expect(new Vector3().setFromMatrixScale(matrix).toArray()).toEqual([2, 4, 3])
 })
 
-test('grade filtering includes the cutoff, excludes missing grades, and resets to all blocks', () => {
-  const { pre } = createBlockModels([
-    { ...blockRow, grade_01: '0.9' },
-    { ...blockRow, IJK: '102', grade_01: '0.4' },
-    { ...blockRow, IJK: '103', grade_01: '0' },
-    { ...blockRow, IJK: '104', grade_01: '' },
+test('grade filtering sorts the blocks, includes the cutoff, and restores missing grades on reset', () => {
+  const blocks = parseBlocks([
+    { ...blockRow, grade_01: '0.4' },
+    { ...blockRow, IJK: '102', grade_01: 'NaN' },
+    { ...blockRow, IJK: '103', grade_01: '0.9' },
+    { ...blockRow, IJK: '104', grade_01: '0' },
   ])
+  const ordered = sortBlocksByColour(blocks, 'grade_01')
 
-  expect(countMinimumMatches(pre, 'grade_01', 1)).toBe(0)
-  expect(countMinimumMatches(pre, 'grade_01', 0.4)).toBe(2)
-  expect(countMinimumMatches(pre, 'grade_01', 0)).toBe(3)
-  expect(countMinimumMatches(pre, 'grade_01', null)).toBe(4)
+  expect(ordered.map((block) => block.attributes.grade_01)).toEqual([0.9, 0.4, 0, null])
+  expect(countMinimumMatches(ordered, 'grade_01', 1)).toBe(0)
+  expect(countMinimumMatches(ordered, 'grade_01', 0.4)).toBe(2)
+  expect(countMinimumMatches(ordered, 'grade_01', 0)).toBe(3)
+  expect(countMinimumMatches(ordered, 'grade_01', null)).toBe(4)
 })
 
 test('blast boundaries follow point order and keep separate outlines apart', () => {

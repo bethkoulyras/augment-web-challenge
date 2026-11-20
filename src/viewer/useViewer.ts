@@ -42,7 +42,7 @@ export function useViewer({
     if (!container || !data) return
 
     try {
-      const viewer = new Viewer(container, data.models, onSliceChange, onSelectBlock)
+      const viewer = new Viewer(container, data.blocks, onSliceChange, onSelectBlock)
       viewerRef.current = viewer
       return () => {
         viewerRef.current = null
@@ -73,7 +73,7 @@ export function useViewer({
   }, [data, colourScale, mode, categorySelection, visibleBlocks, movementBlocks])
 
   // Dragging a grade cutoff can change the counts without rebuilding the meshes.
-  useEffect(() => viewerRef.current?.setBlockCounts(visibleCount, movementCount), [data, movementBlocks, visibleBlocks, visibleCount, movementCount])
+  useEffect(() => viewerRef.current?.setBlockCounts(visibleCount, movementCount), [data, mode, movementBlocks, visibleBlocks, visibleCount, movementCount])
 
   useEffect(() => {
     viewerRef.current?.setSelectedBlock(mode === 'inspect' ? selectedBlock : null)
