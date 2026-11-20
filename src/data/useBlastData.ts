@@ -21,11 +21,12 @@ type BlastLoad =
   | { status: 'ready'; data: BlastData }
 
 const loadingModel = { status: 'loading', stage: 'block model' } as const
+const noBlastHoles: readonly BlastHole[] = []
 
 export function useBlastData() {
   const [blast, setBlast] = useState<BlastLoad>(loadingModel)
   const [loadAttempt, setLoadAttempt] = useState(0)
-  const [blastHoles, setBlastHoles] = useState<BlastHole[]>([])
+  const [blastHoles, setBlastHoles] = useState<readonly BlastHole[] | null>(null)
   const [surfaces, setSurfaces] = useState<SurveySurfaces | null>(null)
   const [showSurfaces, setShowSurfaces] = useState(true)
   const [surfaceLoadFailed, setSurfaceLoadFailed] = useState(false)
@@ -61,7 +62,7 @@ export function useBlastData() {
     loadCsv('/1_blastholes.csv', signal).then((rows) => {
       if (!signal.aborted) setBlastHoles(createBlastHoles(rows))
     }).catch(() => {
-      if (!signal.aborted) setBlastHoles([])
+      if (!signal.aborted) setBlastHoles(noBlastHoles)
     })
 
     return () => controller.abort()
@@ -90,8 +91,18 @@ export function useBlastData() {
 
   const retryLoading = (): void => {
     setBlast(loadingModel)
+    setBlastHoles(null)
     setLoadAttempt((attempt) => attempt + 1)
   }
 
-  return { blast, blastHoles, surfaces, showSurfaces, surfaceLoadFailed, toggleSurfaces, retryLoading }
+  return {
+    blast,
+    blastHoles: blastHoles ?? noBlastHoles,
+    blastHolesLoading: blastHoles === null,
+    surfaces,
+    showSurfaces,
+    surfaceLoadFailed,
+    toggleSurfaces,
+    retryLoading,
+  }
 }

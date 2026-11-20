@@ -13,9 +13,14 @@ import type { ViewerMode } from './viewer/Viewer'
 
 const emptyBlocks: readonly Block[] = []
 const layerDot = 'size-2 shrink-0 rounded-full opacity-40 group-aria-pressed:opacity-100'
+const layerWarning = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="size-3 text-neutral-400">
+    <path d="M12 4 22 21H2Zm0 6v4m0 3h.01" />
+  </svg>
+)
 
 export default function App() {
-  const { blast, blastHoles, surfaces, showSurfaces, surfaceLoadFailed, toggleSurfaces, retryLoading } = useBlastData()
+  const { blast, blastHoles, blastHolesLoading, surfaces, showSurfaces, surfaceLoadFailed, toggleSurfaces, retryLoading } = useBlastData()
   const [showBlastHoles, setShowBlastHoles] = useState(false)
   const [showConnections, setShowConnections] = useState(false)
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null)
@@ -29,6 +34,7 @@ export default function App() {
   const data = blast.status === 'ready' ? blast.data : null
   const allBlocks = data?.blocks ?? emptyBlocks
   const surfacesLoading = showSurfaces && surfaces === null
+  const blastHolesUnavailable = !blastHolesLoading && !blastHoles.length
 
   const colourScales = useMemo(() => createColourScales(allBlocks), [allBlocks])
   const colourScale = colourScales.get(colourField)
@@ -162,29 +168,46 @@ export default function App() {
                 <div className="flex flex-wrap justify-end gap-3">
                   <button
                     type="button"
+                    aria-label="Surfaces"
+                    aria-describedby={surfaceLoadFailed ? 'surfaces-hint' : undefined}
                     aria-pressed={showSurfaces}
                     aria-busy={surfacesLoading || undefined}
                     title={surfacesLoading ? 'Loading survey surfaces…' : undefined}
                     onClick={toggleSurfaces}
-                    className="group outlined-button"
+                    className="group relative outlined-button"
                   >
-                    <span aria-hidden="true" className={surfacesLoading ? 'size-3 shrink-0 rounded-full border border-neutral-500 border-t-neutral-100 motion-safe:animate-spin' : layerDot + ' bg-[#8aa0b2]'} />
+                    <span aria-hidden="true" className="grid size-3 shrink-0 place-items-center">
+                      {surfaceLoadFailed ? layerWarning : (
+                        <span className={surfacesLoading ? 'size-3 rounded-full border border-neutral-500 border-t-neutral-100 motion-safe:animate-spin' : layerDot + ' bg-[#8aa0b2]'} />
+                      )}
+                    </span>
                     Surfaces
+                    {surfaceLoadFailed && (
+                      <span id="surfaces-hint" role="tooltip" className="layer-tooltip left-0">Couldn’t load surfaces. Select to retry.</span>
+                    )}
                   </button>
                   <button
                     type="button"
+                    aria-label="Blast holes"
+                    aria-describedby={blastHolesUnavailable ? 'blast-holes-hint' : undefined}
                     aria-pressed={showBlastHoles}
-                    disabled={!blastHoles.length}
-                    title={blastHoles.length ? undefined : 'Blast hole data unavailable'}
-                    onClick={() => setShowBlastHoles((show) => !show)}
-                    className="group outlined-button"
+                    aria-busy={blastHolesLoading || undefined}
+                    aria-disabled={!blastHoles.length || undefined}
+                    onClick={() => {
+                      if (blastHoles.length) setShowBlastHoles((show) => !show)
+                    }}
+                    className="group relative outlined-button aria-disabled:cursor-default aria-disabled:border-neutral-800 aria-disabled:text-neutral-500"
                   >
-                    <span aria-hidden="true" className={layerDot + ' bg-amber-400'} />
+                    <span aria-hidden="true" className="grid size-3 shrink-0 place-items-center">
+                      {blastHolesUnavailable ? layerWarning : <span className={layerDot + ' bg-amber-400'} />}
+                    </span>
                     Blast holes
+                    {blastHolesUnavailable && (
+                      <span id="blast-holes-hint" role="tooltip" className="layer-tooltip right-0">Blast hole data unavailable.</span>
+                    )}
                   </button>
                 </div>
               </div>
-              {surfaceLoadFailed && <p role="status" className="text-amber-300">Couldn’t load the survey surfaces. Select Surfaces to retry.</p>}
             </MovementSlider>
           </div>
           <SliceSidebar

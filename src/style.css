@@ -6,6 +6,11 @@
   @apply aria-pressed:border-neutral-400 aria-pressed:bg-neutral-700 aria-pressed:text-white;
 }
 
+@utility layer-tooltip {
+  @apply pointer-events-none invisible absolute bottom-full z-10 mb-2 w-max max-w-48 rounded-sm border border-neutral-700 bg-neutral-900 px-2 py-1.5 text-left text-xs font-normal text-neutral-200 shadow-md;
+  @apply group-hover:visible group-focus-visible:visible;
+}
+
 :root {
   --viewer-background: #141414;
   font-family: system-ui, sans-serif;
