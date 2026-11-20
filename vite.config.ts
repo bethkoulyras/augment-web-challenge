@@ -3,6 +3,6 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  publicDir: 'data/private',
+  publicDir: 'data',
   plugins: [react(), tailwindcss()],
 })

@@ -1,10 +1,10 @@
 # Augment Web Challenge
 
-I built a 3D viewer to make it easier to see where material is predicted to move after a blast. It uses the supplied OMP output to show the original and predicted block positions.
+This is a 3D viewer for reviewing a blast using Augment’s OMP results. It helps you spot where the biggest shifts are expected and look more closely at a section or block.
 
 ## Run it locally
 
-Use Node.js 22.12 or later. Put `1_mbm.csv`, `1_pre_string.csv` and `1_pst_string.csv` in `data/private/`.
+Use Node.js 22.12 or later. Put `1_mbm.csv`, `1_pre_string.csv` and `1_pst_string.csv` in `data/`.
 
 Add `1_pre_surface.csv` and `1_pst_surface.csv` for the survey surfaces, and `1_blastholes.csv` for the blast hole overlay.
 
@@ -14,8 +14,6 @@ npm run dev
 ```
 
 Open the local URL printed in the terminal.
-
-Keep the supplied CSVs private. If you run `npm run build` with the data in place, Vite copies the CSVs into `dist/`. Keep that build private too.
 
 ## Try it out
 
