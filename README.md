@@ -39,11 +39,14 @@ The viewer uses GPU instancing to share one cube geometry across the blocks and 
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start the development server. |
+| `npm test` | Run the Vitest suite with synthetic data. |
 | `npm run typecheck` | Run TypeScript checks. |
 | `npm run build` | Check types and build for production. |
 | `npm run preview` | Preview the production build locally. |
 
 Production files are generated in `dist/`.
+
+The tests cover OMP block mapping, playback interpolation, grade filtering, blast boundary geometry, and failed data requests. A React Testing Library test also checks that applying and resetting the grade filter updates the displayed values. The suite uses synthetic data and runs without a browser.
 
 ## Project structure
 
