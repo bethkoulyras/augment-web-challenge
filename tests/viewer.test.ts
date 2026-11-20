@@ -1,9 +1,10 @@
-import { Matrix4, Vector3 } from 'three'
+import { Box3, Matrix4, PerspectiveCamera, Vector3 } from 'three'
 import { expect, test, vi } from 'vitest'
 import { parseBlocks } from '../src/data/blockModels'
 import { countMinimumMatches, sortBlocksByColour } from '../src/data/blockColours'
 import { createBlastBoundarySegments } from '../src/data/blastBoundary'
 import { SectionMovement } from '../src/viewer/SectionMovement'
+import { frameInspection } from '../src/viewer/cameraFraming'
 import { loadCsv } from '../src/utils/loadCsv'
 
 const blockRow = {
@@ -66,6 +67,32 @@ test('playback interpolates the block position while preserving its dimensions',
     expect(position.setFromMatrixPosition(matrix).toArray()).toEqual(expectedPosition)
   }
   expect(new Vector3().setFromMatrixScale(matrix).toArray()).toEqual([2, 4, 3])
+})
+
+test('inspection framing fits both block positions in the space available', () => {
+  const boxes = [
+    new Box3(new Vector3(0, 0, 0), new Vector3(5, 5, 5)),
+    new Box3(new Vector3(20, -3, 40), new Vector3(25, 2, 45)),
+  ]
+  const viewport = { width: 540, height: 480, canvasHeight: 740 }
+  const canvasWidth = 1000
+  const camera = new PerspectiveCamera(45, canvasWidth / viewport.canvasHeight)
+  const frame = frameInspection(boxes, camera, viewport, 25)
+  camera.position.copy(frame.position)
+  camera.lookAt(frame.target)
+  camera.updateMatrixWorld()
+
+  for (const { min, max } of boxes) {
+    for (const x of [min.x, max.x]) {
+      for (const y of [min.y, max.y]) {
+        for (const z of [min.z, max.z]) {
+          const point = new Vector3(x, y, z).project(camera)
+          expect(Math.abs(point.x)).toBeLessThan(viewport.width / canvasWidth)
+          expect(Math.abs(point.y)).toBeLessThan(viewport.height / viewport.canvasHeight)
+        }
+      }
+    }
+  }
 })
 
 test('grade filtering sorts the blocks, includes the cutoff, and restores missing grades on reset', () => {
