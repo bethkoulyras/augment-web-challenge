@@ -1,15 +1,14 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Viewer } from './Viewer'
 import type { ViewerMode } from './Viewer'
-import type { BlastBoundaries } from '../data/blastBoundary'
+import type { BlastData } from '../data/useBlastData'
 import type { BlastHole } from '../data/blastHoles'
 import type { ColourScale } from '../data/blockColours'
-import type { Block, BlockModels, CategorySelection } from '../data/blockModels'
+import type { Block, CategorySelection } from '../data/blockModels'
 import type { SurveySurfaces } from '../data/surveySurfaces'
 
 interface ViewerOptions {
-  models: BlockModels | null
-  blastBoundaries: BlastBoundaries
+  data: BlastData | null
   blastHoles: readonly BlastHole[]
   showBlastHoles: boolean
   showConnections: boolean
@@ -30,49 +29,55 @@ interface ViewerOptions {
 }
 
 export function useViewer({
-  models, blastBoundaries, blastHoles, showBlastHoles, showConnections, surfaces, showSurfaces,
+  data, blastHoles, showBlastHoles, showConnections, surfaces, showSurfaces,
   colourScale, mode, sidebarOpen, slicePosition, movementBlocks, visibleBlocks, visibleCount,
   movementCount, categorySelection, selectedBlock, onSelectBlock, onSliceChange,
 }: ViewerOptions) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Viewer | null>(null)
+  const [viewerFailed, setViewerFailed] = useState(false)
 
   useEffect(() => {
     const container = containerRef.current
-    if (!container || !models) return
+    if (!container || !data) return
 
-    const viewer = new Viewer(container, models, onSliceChange, onSelectBlock)
-    viewerRef.current = viewer
-    return () => {
-      viewerRef.current = null
-      viewer.dispose()
+    try {
+      const viewer = new Viewer(container, data.models, onSliceChange, onSelectBlock)
+      viewerRef.current = viewer
+      return () => {
+        viewerRef.current = null
+        viewer.dispose()
+      }
+    } catch (error) {
+      console.error(error)
+      setViewerFailed(true)
     }
-  }, [models, onSliceChange, onSelectBlock])
+  }, [data, onSliceChange, onSelectBlock])
 
   useEffect(() => {
-    viewerRef.current?.setBlastBoundaries(blastBoundaries)
+    if (data) viewerRef.current?.setBlastBoundaries(data.boundaries)
     viewerRef.current?.setBlastHoles(blastHoles)
-  }, [models, blastBoundaries, blastHoles])
+  }, [data, blastHoles])
 
   useEffect(() => {
     if (surfaces) viewerRef.current?.setSurveySurfaces(surfaces)
-  }, [models, surfaces])
+  }, [data, surfaces])
 
   useEffect(() => {
     viewerRef.current?.setMovementBlocks(mode, movementBlocks ?? [])
-  }, [models, mode, movementBlocks])
+  }, [data, mode, movementBlocks])
 
   useEffect(() => {
     viewerRef.current?.setVisibleBlocks(visibleBlocks)
     if (colourScale) viewerRef.current?.setColourScale(colourScale, mode === 'slice' ? categorySelection : null)
-  }, [models, colourScale, mode, categorySelection, visibleBlocks, movementBlocks])
+  }, [data, colourScale, mode, categorySelection, visibleBlocks, movementBlocks])
 
   // Dragging a grade cutoff can change the counts without rebuilding the meshes.
-  useEffect(() => viewerRef.current?.setBlockCounts(visibleCount, movementCount), [models, movementBlocks, visibleBlocks, visibleCount, movementCount])
+  useEffect(() => viewerRef.current?.setBlockCounts(visibleCount, movementCount), [data, movementBlocks, visibleBlocks, visibleCount, movementCount])
 
   useEffect(() => {
     viewerRef.current?.setSelectedBlock(mode === 'inspect' ? selectedBlock : null)
-  }, [models, mode, movementBlocks, selectedBlock])
+  }, [data, mode, movementBlocks, selectedBlock])
 
   useEffect(() => {
     const viewer = viewerRef.current
@@ -81,15 +86,15 @@ export function useViewer({
     viewer.setBlastHolesVisible(showBlastHoles)
     viewer.setSurveySurfacesVisible(showSurfaces)
     viewer.setConnectionsVisible(showConnections)
-  }, [models, sidebarOpen, showBlastHoles, showSurfaces, showConnections])
+  }, [data, sidebarOpen, showBlastHoles, showSurfaces, showConnections])
 
   useEffect(() => {
     if (mode !== 'model' && slicePosition !== null) viewerRef.current?.setSlicePosition(slicePosition)
     if (mode === 'inspect') viewerRef.current?.frameSection()
-  }, [models, mode, slicePosition])
+  }, [data, mode, slicePosition])
 
   const resetView = useCallback(() => viewerRef.current?.resetView(), [])
   const setProgress = useCallback((progress: number) => viewerRef.current?.setMovementProgress(progress), [])
 
-  return { containerRef, resetView, setProgress }
+  return { containerRef, viewerFailed, resetView, setProgress }
 }

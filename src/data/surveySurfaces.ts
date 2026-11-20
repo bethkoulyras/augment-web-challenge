@@ -1,4 +1,5 @@
 import Papa from 'papaparse'
+import { csvNumber } from '../utils/loadCsv'
 
 interface SurveySurface {
   origin: [x: number, y: number, z: number]
@@ -11,7 +12,7 @@ export interface SurveySurfaces {
 }
 
 function readNumber(raw: string | undefined): number {
-  const value = Number(raw?.trim() || NaN)
+  const value = csvNumber(raw)
   if (!Number.isFinite(value)) throw new Error('Invalid survey coordinate or face number.')
   return value
 }

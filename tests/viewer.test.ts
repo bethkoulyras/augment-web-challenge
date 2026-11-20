@@ -93,9 +93,26 @@ test('blast boundaries follow point order and keep separate outlines apart', () 
   ])
 })
 
+test('empty or invalid blast boundaries are reported as data errors', () => {
+  expect(() => createBlastBoundarySegments([])).toThrow('no line segments')
+  expect(() => createBlastBoundarySegments([
+    { SID: 'A', PID: '1', X: '', Y: '0', Z: '4' },
+  ])).toThrow('Invalid point')
+})
+
 test('a failed CSV request reports which file could not be loaded', async ({ onTestFinished }) => {
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 503 }))
   onTestFinished(() => { fetch.mockRestore() })
+
+  const { signal } = new AbortController()
+  await expect(loadCsv('/synthetic.csv', signal)).rejects.toThrow('Could not load /synthetic.csv')
+})
+
+test('a missing CSV served as an HTML fallback is reported as unavailable', async ({ onTestFinished }) => {
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('<!doctype html>', {
+    headers: { 'content-type': 'text/html' },
+  }))
+  onTestFinished(() => fetch.mockRestore())
 
   const { signal } = new AbortController()
   await expect(loadCsv('/synthetic.csv', signal)).rejects.toThrow('Could not load /synthetic.csv')

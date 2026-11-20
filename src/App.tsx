@@ -1,38 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import ColourPalette from './components/ColourPalette'
 import MinimumFilterControls from './components/MinimumFilterControls'
 import MovementSlider from './components/MovementSlider'
 import SliceSidebar from './components/SliceSidebar'
 import ViewerHeader from './components/ViewerHeader'
 import { colourValue, countMinimumMatches, createColourScales } from './data/blockColours'
-import { csvFiles } from './data/csvFiles'
-import { categoryFields, createBlockModels } from './data/blockModels'
-import { createBlastBoundarySegments } from './data/blastBoundary'
-import type { BlastBoundaries } from './data/blastBoundary'
-import { createBlastHoles } from './data/blastHoles'
-import type { BlastHole } from './data/blastHoles'
-import type { Block, BlockModels, CategorySelection, ColourField } from './data/blockModels'
-import { loadSurveySurfaces } from './data/surveySurfaces'
-import type { SurveySurfaces } from './data/surveySurfaces'
+import { categoryFields } from './data/blockModels'
+import type { Block, CategorySelection, ColourField } from './data/blockModels'
+import { useBlastData } from './data/useBlastData'
 import { useViewer } from './viewer/useViewer'
 import type { ViewerMode } from './viewer/Viewer'
-import { loadCsv } from './utils/loadCsv'
 
 const emptyBlocks: readonly Block[] = []
 const layerDot = 'size-2 shrink-0 rounded-full opacity-40 group-aria-pressed:opacity-100'
 
 export default function App() {
-  const [models, setModels] = useState<BlockModels | null>(null)
-  const [blastBoundaries, setBlastBoundaries] = useState<BlastBoundaries>({ pre: [], post: [] })
-  const [blastHoles, setBlastHoles] = useState<BlastHole[]>([])
+  const { blast, blastHoles, surfaces, showSurfaces, surfaceLoadFailed, toggleSurfaces, retryLoading } = useBlastData()
   const [showBlastHoles, setShowBlastHoles] = useState(false)
   const [showConnections, setShowConnections] = useState(false)
-  const [showSurfaces, setShowSurfaces] = useState(true)
-  const [surfaces, setSurfaces] = useState<SurveySurfaces | null>(null)
-  const [surfaceLoadFailed, setSurfaceLoadFailed] = useState(false)
-  const [loadedCount, setLoadedCount] = useState(0)
-  const [error, setError] = useState<string | null>(null)
-  const [loadAttempt, setLoadAttempt] = useState(0)
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null)
   const [categorySelection, setCategorySelection] = useState<CategorySelection | null>(null)
   const [minimumFilter, setMinimumFilter] = useState<{ minimum: number; blocks: readonly Block[] } | null>(null)
@@ -41,7 +26,8 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarFocusRequest, setSidebarFocusRequest] = useState(0)
   const [colourField, setColourField] = useState<ColourField>('grade_01')
-  const isLoading = loadedCount < csvFiles.length
+  const data = blast.status === 'ready' ? blast.data : null
+  const models = data?.models
   const surfacesLoading = showSurfaces && surfaces === null
 
   const colourScales = useMemo(() => createColourScales(models?.pre ?? emptyBlocks), [models])
@@ -78,10 +64,8 @@ export default function App() {
   // React's development profiler deeply compares changed array props.
   const getMovementBlocks = useCallback(() => movementBlocks, [movementBlocks])
 
-  const readyModels = !isLoading && colourScale ? models : null
-  const { containerRef, resetView, setProgress } = useViewer({
-    models: readyModels,
-    blastBoundaries,
+  const { containerRef, viewerFailed, resetView, setProgress } = useViewer({
+    data,
     blastHoles,
     surfaces,
     showBlastHoles,
@@ -100,68 +84,6 @@ export default function App() {
     onSelectBlock: setSelectedBlock,
     onSliceChange: setSlicePosition,
   })
-
-  useEffect(() => {
-    const controller = new AbortController()
-
-    const loadFiles = async (): Promise<void> => {
-      for (const file of csvFiles) {
-        const rows = await loadCsv('/' + file, controller.signal)
-        if (controller.signal.aborted) return
-        if (file === '1_mbm.csv') {
-          const loadedModels = createBlockModels(rows)
-          if (!loadedModels.pre.length) throw new Error('The block model file contains no usable blocks.')
-          setModels(loadedModels)
-        }
-        if (file === '1_pre_string.csv') setBlastBoundaries((current) => ({ ...current, pre: createBlastBoundarySegments(rows) }))
-        if (file === '1_pst_string.csv') setBlastBoundaries((current) => ({ ...current, post: createBlastBoundarySegments(rows) }))
-        setLoadedCount((count) => count + 1)
-      }
-    }
-
-    loadFiles().catch((error: unknown) => {
-      if (!controller.signal.aborted) {
-        setError(error instanceof Error ? error.message : 'Could not load the CSV.')
-      }
-    })
-
-    loadCsv('/1_blastholes.csv', controller.signal).then((rows) => {
-      if (!controller.signal.aborted) setBlastHoles(createBlastHoles(rows))
-    }).catch(() => {
-      if (!controller.signal.aborted) setBlastHoles([])
-    })
-
-    return () => controller.abort()
-  }, [loadAttempt])
-
-  useEffect(() => {
-    if (error || !showSurfaces || surfaces) return
-    const controller = new AbortController()
-    const { signal } = controller
-
-    loadSurveySurfaces(signal).then((data) => {
-      if (!signal.aborted) setSurfaces(data)
-    }).catch(() => {
-      if (signal.aborted) return
-      setShowSurfaces(false)
-      setSurfaceLoadFailed(true)
-    })
-
-    return () => controller.abort()
-  }, [error, showSurfaces, surfaces])
-
-  const toggleSurfaces = (): void => {
-    setSurfaceLoadFailed(false)
-    setShowSurfaces((show) => !show)
-  }
-
-  const retryLoading = (): void => {
-    setModels(null)
-    setBlastBoundaries({ pre: [], post: [] })
-    setLoadedCount(0)
-    setError(null)
-    setLoadAttempt((attempt) => attempt + 1)
-  }
 
   const goToSectionMode = (nextMode: ViewerMode): void => {
     setSidebarFocusRequest((request) => request + 1)
@@ -209,7 +131,7 @@ export default function App() {
 
   return (
     <main className="viewer-layout relative grid h-full w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)_auto] gap-3 p-[var(--viewer-inset)] sm:block sm:p-0">
-      {readyModels && colourScale && (
+      {data && colourScale && !viewerFailed && (
         <>
           <div
             ref={containerRef}
@@ -270,7 +192,7 @@ export default function App() {
             </MovementSlider>
           </div>
           <SliceSidebar
-            models={readyModels}
+            models={data.models}
             scale={colourScale}
             filtered={filtered}
             mode={mode}
@@ -292,26 +214,31 @@ export default function App() {
           </SliceSidebar>
         </>
       )}
-      {(isLoading || error) && (
+      {(blast.status !== 'ready' || viewerFailed) && (
         <div className="absolute inset-0 grid place-items-center p-[var(--viewer-inset)]">
           <div className="w-full max-w-sm rounded-md border border-neutral-700 bg-neutral-900/95 p-6 shadow-lg">
             <h1 className="text-lg font-semibold tracking-tight text-neutral-100">OMP blast movement</h1>
-            {error ? (
+            {viewerFailed ? (
+              <div role="alert" className="mt-2 space-y-1 text-sm">
+                <p className="font-medium text-red-300">Couldn’t start the 3D viewer</p>
+                <p className="text-neutral-400">Enable WebGL 2 in your browser and reload the page.</p>
+              </div>
+            ) : blast.status === 'failed' ? (
               <>
                 <div role="alert" className="mt-2 space-y-1 text-sm">
                   <p className="font-medium text-red-300">
-                    {models ? 'Couldn’t load the blast boundaries' : 'Couldn’t load the block model'}
+                    Couldn’t load the {blast.stage}
                   </p>
-                  <p className="break-words text-neutral-400">{error}</p>
+                  <p className="break-words text-neutral-400">{blast.message}</p>
                 </div>
                 <button type="button" onClick={retryLoading} className="outlined-button mt-5 text-xs text-neutral-100">
                   Try again
                 </button>
               </>
-            ) : (
+            ) : blast.status === 'loading' && (
               <>
                 <p role="status" className="mt-1 text-sm text-neutral-400">
-                  {models ? 'Loading blast boundaries…' : 'Loading block model…'}
+                  Loading {blast.stage}…
                 </p>
                 <div aria-hidden="true" className="mt-5 h-1 overflow-hidden rounded-sm bg-neutral-800">
                   <span className="block h-full w-1/3 rounded-sm bg-[#8aa0b2] motion-safe:animate-[viewer-loading_1.2s_ease-in-out_infinite_alternate] motion-reduce:w-full motion-reduce:bg-neutral-600" />
