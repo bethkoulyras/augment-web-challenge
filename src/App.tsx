@@ -1,55 +1,35 @@
 import { useMemo, useState } from 'react'
 import ColourPalette from './components/ColourPalette'
 import MinimumFilterControls from './components/MinimumFilterControls'
+import ModelLayerControls from './components/ModelLayerControls'
 import MovementSlider from './components/MovementSlider'
+import SectionSlider from './components/SectionSlider'
 import SliceSidebar from './components/SliceSidebar'
 import ViewerHeader from './components/ViewerHeader'
-import { countMinimumMatches, createColourScales, sortBlocksByColour } from './data/blockColours'
-import { categoryFields } from './data/blockModels'
-import type { Block, CategorySelection, ColourField } from './data/blockModels'
+import { countMinimumMatches } from './data/blockColours'
+import type { Block } from './data/blockModels'
 import { useBlastData } from './data/useBlastData'
+import { useBlockFilters } from './data/useBlockFilters'
 import { useViewer } from './viewer/useViewer'
 import type { ViewerMode } from './viewer/Viewer'
 
 const emptyBlocks: readonly Block[] = []
-const layerDot = 'size-2 shrink-0 rounded-full opacity-40 group-aria-pressed:opacity-100'
-const layerWarning = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className="size-3 text-neutral-400">
-    <path d="M12 4 22 21H2Zm0 6v4m0 3h.01" />
-  </svg>
-)
 
 export default function App() {
   const { blast, blastHoles, blastHolesLoading, surfaces, showSurfaces, surfaceLoadFailed, toggleSurfaces, retryLoading } = useBlastData()
   const [showBlastHoles, setShowBlastHoles] = useState(false)
   const [showConnections, setShowConnections] = useState(false)
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null)
-  const [categorySelection, setCategorySelection] = useState<CategorySelection | null>(null)
-  const [minimumFilter, setMinimumFilter] = useState<{ minimum: number; blocks: readonly Block[] } | null>(null)
   const [mode, setMode] = useState<ViewerMode>('model')
   const [slicePosition, setSlicePosition] = useState<number | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarFocusRequest, setSidebarFocusRequest] = useState(0)
-  const [colourField, setColourField] = useState<ColourField>('grade_01')
   const data = blast.status === 'ready' ? blast.data : null
   const allBlocks = data?.blocks ?? emptyBlocks
-  const surfacesLoading = showSurfaces && surfaces === null
-  const blastHolesUnavailable = !blastHolesLoading && !blastHoles.length
-
-  const colourScales = useMemo(() => createColourScales(allBlocks), [allBlocks])
-  const colourScale = colourScales.get(colourField)
-  const minimum = minimumFilter?.minimum ?? null
-  const filtered = categorySelection !== null || minimum !== null
-  const orderedBlocks = minimumFilter?.blocks ?? allBlocks
-
-  const visibleCount = countMinimumMatches(orderedBlocks, colourField, minimum)
-
-  const categoryBlocks = useMemo(() => categorySelection
-    ? orderedBlocks.filter((block) => block.attributes[categorySelection.field] === categorySelection.value)
-    : null, [orderedBlocks, categorySelection])
-
-  const modelBlocks = categoryBlocks ?? orderedBlocks
-  const modelCount = categoryBlocks?.length ?? visibleCount
+  const {
+    colourField, colourScale, minimum, filtered, orderedBlocks, categorySelection, visibleCount,
+    modelBlocks, modelCount, changeColourField, changeCategoryCode, changeMinimum,
+  } = useBlockFilters(allBlocks, () => setSelectedBlock(null))
 
   const inSection = mode !== 'model'
   const sectionBlocks = useMemo(() => {
@@ -106,31 +86,6 @@ export default function App() {
     setSelectedBlock(null)
   }
 
-  const changeColourField = (field: ColourField): void => {
-    if (field === colourField) return
-    setColourField(field)
-    setMinimumFilter(null)
-    setCategorySelection(null)
-    if (minimumFilter || categorySelection) setSelectedBlock(null)
-  }
-
-  const changeCategoryCode = (value: number | null): void => {
-    const field = categoryFields.find((category) => category === colourField)
-    if (!field || (categorySelection?.value ?? null) === value) return
-    setCategorySelection(value === null ? null : { field, value })
-    setSelectedBlock(null)
-  }
-
-  const changeMinimum = (minimum: number | null): void => {
-    if (minimum !== null) {
-      const blocks = minimumFilter?.blocks ?? sortBlocksByColour(allBlocks, colourField)
-      setMinimumFilter({ minimum, blocks })
-    } else {
-      setMinimumFilter(null)
-    }
-    setSelectedBlock(null)
-  }
-
   return (
     <main className="viewer-layout relative grid h-full w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)_auto] gap-3 p-[var(--viewer-inset)] sm:block sm:p-0">
       {data && colourScale && !viewerFailed && (
@@ -160,58 +115,19 @@ export default function App() {
               disabled={firstMovingBlock < 0 || firstMovingBlock >= movementCount}
               onChange={setProgress}
             >
-              <div role="group" aria-label="Model layers" className="flex flex-wrap items-center justify-end gap-4">
-                <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-neutral-400">
-                  <span aria-hidden="true" className="w-3 border-t border-neutral-500" />
-                  Blast boundary
-                </span>
-                <div className="flex flex-wrap justify-end gap-3">
-                  <button
-                    type="button"
-                    aria-label="Surfaces"
-                    aria-describedby={surfaceLoadFailed ? 'surfaces-hint' : undefined}
-                    aria-pressed={showSurfaces}
-                    aria-busy={surfacesLoading || undefined}
-                    title={surfacesLoading ? 'Loading survey surfaces…' : undefined}
-                    onClick={toggleSurfaces}
-                    className="group relative outlined-button"
-                  >
-                    <span aria-hidden="true" className="grid size-3 shrink-0 place-items-center">
-                      {surfaceLoadFailed ? layerWarning : (
-                        <span className={surfacesLoading ? 'size-3 rounded-full border border-neutral-500 border-t-neutral-100 motion-safe:animate-spin' : layerDot + ' bg-[#8aa0b2]'} />
-                      )}
-                    </span>
-                    Surfaces
-                    {surfaceLoadFailed && (
-                      <span id="surfaces-hint" role="tooltip" className="layer-tooltip left-0">Couldn’t load surfaces. Select to retry.</span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Blast holes"
-                    aria-describedby={blastHolesUnavailable ? 'blast-holes-hint' : undefined}
-                    aria-pressed={showBlastHoles}
-                    aria-busy={blastHolesLoading || undefined}
-                    aria-disabled={!blastHoles.length || undefined}
-                    onClick={() => {
-                      if (blastHoles.length) setShowBlastHoles((show) => !show)
-                    }}
-                    className="group relative outlined-button aria-disabled:cursor-default aria-disabled:border-neutral-800 aria-disabled:text-neutral-500"
-                  >
-                    <span aria-hidden="true" className="grid size-3 shrink-0 place-items-center">
-                      {blastHolesUnavailable ? layerWarning : <span className={layerDot + ' bg-amber-400'} />}
-                    </span>
-                    Blast holes
-                    {blastHolesUnavailable && (
-                      <span id="blast-holes-hint" role="tooltip" className="layer-tooltip right-0">Blast hole data unavailable.</span>
-                    )}
-                  </button>
-                </div>
-              </div>
+              <ModelLayerControls
+                showSurfaces={showSurfaces}
+                surfacesLoading={showSurfaces && surfaces === null}
+                surfaceLoadFailed={surfaceLoadFailed}
+                onToggleSurfaces={toggleSurfaces}
+                showBlastHoles={showBlastHoles}
+                blastHolesLoading={blastHolesLoading}
+                hasBlastHoles={blastHoles.length > 0}
+                onToggleBlastHoles={() => setShowBlastHoles((show) => !show)}
+              />
             </MovementSlider>
           </div>
           <SliceSidebar
-            allBlocks={allBlocks}
             scale={colourScale}
             filtered={filtered}
             mode={mode}
@@ -219,11 +135,10 @@ export default function App() {
             focusRequest={sidebarFocusRequest}
             blocks={trackedBlocks}
             totalCount={sectionBlocks.length}
-            slicePosition={slicePosition}
+            northingSlider={<SectionSlider blocks={allBlocks} position={slicePosition} onChange={setSlicePosition} />}
             selectedBlock={selectedBlock}
             showConnections={showConnections}
             onModeChange={goToSectionMode}
-            onSliceChange={setSlicePosition}
             onClearBlock={clearBlockSelection}
             onToggleConnections={() => setShowConnections((show) => !show)}
           >

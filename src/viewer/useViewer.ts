@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { Viewer } from './Viewer'
 import type { BlockView } from './Viewer'
 import type { BlastData } from '../data/useBlastData'
@@ -27,13 +27,16 @@ export function useViewer({
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<Viewer | null>(null)
   const [viewerFailed, setViewerFailed] = useState(false)
+  const blocks = data?.blocks
+  const notifySliceChange = useEffectEvent(onSliceChange)
+  const notifyBlockSelection = useEffectEvent(onSelectBlock)
 
   useEffect(() => {
     const container = containerRef.current
-    if (!container || !data) return
+    if (!container || !blocks) return
 
     try {
-      const viewer = new Viewer(container, data.blocks, onSliceChange, onSelectBlock)
+      const viewer = new Viewer(container, blocks, notifySliceChange, notifyBlockSelection)
       viewerRef.current = viewer
       return () => {
         viewerRef.current = null
@@ -43,10 +46,13 @@ export function useViewer({
       console.error(error)
       setViewerFailed(true)
     }
-  }, [data, onSliceChange, onSelectBlock])
+  }, [blocks])
 
   useEffect(() => {
     if (data) viewerRef.current?.setBlastBoundaries(data.boundaries)
+  }, [data])
+
+  useEffect(() => {
     viewerRef.current?.setBlastHoles(blastHoles)
   }, [data, blastHoles])
 

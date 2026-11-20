@@ -2,14 +2,12 @@ import { useLayoutEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import BlockInspector from './BlockInspector'
 import CrossSectionPanel from './CrossSectionPanel'
-import SectionSlider from './SectionSlider'
 import SectionSummary from './SectionSummary'
 import type { ColourScale } from '../data/blockColours'
 import type { Block } from '../data/blockModels'
 import type { ViewerMode } from '../viewer/Viewer'
 
 interface SliceSidebarProps {
-  allBlocks: readonly Block[]
   scale: ColourScale
   filtered: boolean
   mode: ViewerMode
@@ -17,11 +15,10 @@ interface SliceSidebarProps {
   focusRequest: number
   blocks: readonly Block[]
   totalCount: number
-  slicePosition: number | null
+  northingSlider: ReactNode
   selectedBlock: Block | null
   showConnections: boolean
   onModeChange: (mode: ViewerMode) => void
-  onSliceChange: (position: number) => void
   onClearBlock: () => void
   onToggleConnections: () => void
   children: ReactNode
@@ -36,8 +33,8 @@ const sliceIcon = (
 )
 
 export default function SliceSidebar({
-  allBlocks, scale, filtered, mode, open, focusRequest, blocks, totalCount, slicePosition,
-  selectedBlock, showConnections, onModeChange, onSliceChange, onClearBlock, onToggleConnections, children,
+  scale, filtered, mode, open, focusRequest, blocks, totalCount, northingSlider,
+  selectedBlock, showConnections, onModeChange, onClearBlock, onToggleConnections, children,
 }: SliceSidebarProps) {
   const sidebarRef = useRef<HTMLDivElement>(null)
   const sidebarResultRef = useRef<HTMLDivElement>(null)
@@ -82,8 +79,6 @@ export default function SliceSidebar({
       sidebar.removeEventListener('scroll', updateScrollFade)
     }
   }, [])
-
-  const northingSlider = <SectionSlider blocks={allBlocks} position={slicePosition} onChange={onSliceChange} />
 
   return (
     <aside
