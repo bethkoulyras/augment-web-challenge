@@ -3,9 +3,11 @@ import {
   Box3,
   Box3Helper,
   BoxGeometry,
+  BufferAttribute,
   BufferGeometry,
   Color,
   DirectionalLight,
+  DoubleSide,
   InstancedBufferAttribute,
   InstancedMesh,
   Line,
@@ -13,6 +15,7 @@ import {
   LineSegments,
   MathUtils,
   Matrix4,
+  Mesh,
   MeshLambertMaterial,
   PerspectiveCamera,
   Plane,
@@ -35,13 +38,16 @@ import type { ColourScale } from '../data/blockColours'
 import type { BlastBoundaries } from '../data/blastBoundary'
 import type { BlastHole } from '../data/blastHoles'
 import type { Block, BlockModels, CategorySelection } from '../data/blockModels'
+import type { SurveySurfaces } from '../data/surveySurfaces'
 
 export type ViewerMode = 'model' | 'slice' | 'inspect'
 
 const inspectionPadding = { top: 64, bottom: 216, sides: 24 }
+const surveyStages = ['pre', 'post'] as const
 
 export class Viewer {
   private readonly scene = new Scene()
+  private readonly surveyScene = new Scene()
   private readonly camera = new PerspectiveCamera(45, 1, 0.1, 100)
   private readonly material = new MeshLambertMaterial({ color: 0xffffff })
   private readonly sliceZ = new Uniform(0)
@@ -59,6 +65,11 @@ export class Viewer {
     new BufferGeometry(),
     new LineBasicMaterial({ color: 0xa3a3a3, transparent: true, opacity: 0.4 * opacity, depthTest: false, depthWrite: false }),
   ))
+  private readonly surveySurfaces = surveyStages.map(() => new Mesh(
+    new BufferGeometry(),
+    new MeshLambertMaterial({ color: 0x8096aa, side: DoubleSide, opacity: 0.7, flatShading: true, transparent: true, depthWrite: false, forceSinglePass: true }),
+  ))
+  private readonly surveyOpacity = this.surveySurfaces[0].material.opacity
   private readonly blastHoleLines = new LineSegments(
     new BufferGeometry(),
     new LineBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.65, depthTest: false, depthWrite: false }),
@@ -78,6 +89,7 @@ export class Viewer {
   )
   private movement: SectionMovement | null = null
   private movementProgress = 0
+  private showSurveySurfaces = false
   private showConnections = false
   private selectedIndex: number | null = null
   private readonly pointerDownPosition = new Vector2()
@@ -150,7 +162,8 @@ export class Viewer {
     this.movementLine.visible = false
     this.movementLine.frustumCulled = false
     this.scene.add(this.originalPositionHighlight, this.otherPositionHighlight, this.movementLine)
-    this.scene.add(this.mesh, this.hoverHighlight, this.selectionHighlight, new AmbientLight(0xffffff, 0.8), light)
+    const ambientLight = new AmbientLight(0xffffff, 0.8)
+    this.scene.add(this.mesh, this.hoverHighlight, this.selectionHighlight, ambientLight, light)
 
     const bounds = this.mesh.boundingBox!
     for (const boundary of this.blastBoundaries) {
@@ -158,6 +171,8 @@ export class Viewer {
       boundary.renderOrder = 2
     }
     this.scene.add(...this.blastBoundaries)
+    for (const surface of this.surveySurfaces) surface.visible = false
+    this.surveyScene.add(...this.surveySurfaces, ambientLight.clone(), light.clone())
     this.blastHoleLines.visible = false
     this.blastHoleLines.renderOrder = 4
     this.blastHoleCollars.renderOrder = 5
@@ -221,6 +236,34 @@ export class Viewer {
     for (const boundary of this.blastBoundaries) boundary.visible = visible
   }
 
+  public setSurveySurfaces(surfaces: SurveySurfaces): void {
+    surveyStages.forEach((stage, index) => {
+      const mesh = this.surveySurfaces[index]
+      const { origin: [x, y, z], positions } = surfaces[stage]
+      mesh.geometry.dispose()
+      mesh.geometry = new BufferGeometry().setAttribute('position', new BufferAttribute(positions, 3))
+      mesh.position.set(x - this.origin.x, z - this.origin.z, this.origin.y - y)
+    })
+    this.updateSurveySurfaces()
+    this.render()
+  }
+
+  public setSurveySurfacesVisible(visible: boolean): void {
+    this.showSurveySurfaces = visible
+    this.updateSurveySurfaces()
+    this.render()
+  }
+
+  private updateSurveySurfaces(): void {
+    const opacity = this.surveyOpacity * (this.mode === 'model' ? 1 : 0.35)
+    this.surveySurfaces.forEach((mesh, index) => {
+      const weight = index === 0 ? 1 - this.movementProgress : this.movementProgress
+      mesh.material.opacity = opacity * weight
+      mesh.material.depthWrite = weight === 1
+      mesh.visible = this.showSurveySurfaces && weight > 0 && mesh.geometry.hasAttribute('position')
+    })
+  }
+
   public setBlastHoles(holes: readonly BlastHole[]): void {
     const collars: Vector3[] = []
     const segments: Vector3[] = []
@@ -264,7 +307,7 @@ export class Viewer {
     this.render()
   }
 
-  public setMode(mode: ViewerMode, sidebarWidth = 0): void {
+  public setMode(mode: ViewerMode): void {
     const inspecting = mode === 'inspect'
     if (mode !== this.mode) this.setMovementProgress(0)
     this.slicer?.setEnabled(mode === 'slice')
@@ -273,9 +316,10 @@ export class Viewer {
     if (!inspecting) this.setSection([])
     this.material.color.setScalar(inspecting ? 0.2 : 1)
     this.material.clippingPlanes = inspecting ? [this.clippingPlane] : []
+    for (const surface of this.surveySurfaces) surface.material.clippingPlanes = this.material.clippingPlanes
+    this.updateSurveySurfaces()
     this.blastHoleLines.material.clippingPlanes = this.material.clippingPlanes
     this.blastHoleCollars.material.clippingPlanes = this.material.clippingPlanes
-    this.sidebarWidth = sidebarWidth
     this.resize()
 
     if (inspecting && !this.savedCamera) {
@@ -368,6 +412,7 @@ export class Viewer {
     this.movement?.setProgress(this.movementProgress)
     this.blastBoundaries[0].material.opacity = 0.4 * (1 - this.movementProgress)
     this.blastBoundaries[1].material.opacity = 0.4 * this.movementProgress
+    this.updateSurveySurfaces()
     this.clearHover()
     this.updateSelection()
     this.render()
@@ -491,6 +536,10 @@ export class Viewer {
       boundary.geometry.dispose()
       boundary.material.dispose()
     }
+    for (const surface of this.surveySurfaces) {
+      surface.geometry.dispose()
+      surface.material.dispose()
+    }
     this.blastHoleLines.geometry.dispose()
     this.blastHoleCollars.geometry.dispose()
     this.blastHoleLines.material.dispose()
@@ -516,6 +565,7 @@ export class Viewer {
     this.mesh.geometry.dispose()
     this.material.dispose()
     this.scene.clear()
+    this.surveyScene.clear()
     this.renderer.dispose()
     this.renderer.domElement.remove()
   }
@@ -620,6 +670,10 @@ export class Viewer {
     if (this.disposed) return
     const { clientWidth: width, clientHeight: height } = this.container
     if (width === 0 || height === 0) return
+    const style = getComputedStyle(this.container)
+    const sidebarWidth = Number.parseFloat(style.getPropertyValue('--viewer-sidebar-width')) || 0
+    const inset = Number.parseFloat(style.getPropertyValue('--viewer-inset')) || 0
+    this.sidebarWidth = sidebarWidth + inset * 2
     this.updateViewportProjection(width, height)
     this.renderer.setSize(width, height)
     this.clearHover()
@@ -647,6 +701,13 @@ export class Viewer {
         this.controls.target.lerpVectors(move.fromTarget, move.toTarget, eased)
         this.controls.update()
         if (progress === 1) this.cameraMove = null
+      }
+      this.renderer.autoClear = true
+      // Keep the survey underneath the block model and its inspection highlights.
+      if (this.surveySurfaces.some((surface) => surface.visible)) {
+        this.renderer.render(this.surveyScene, this.camera)
+        this.renderer.clearDepth()
+        this.renderer.autoClear = false
       }
       this.renderer.render(this.scene, this.camera)
       if (this.cameraMove || this.sidebarMove) this.render()

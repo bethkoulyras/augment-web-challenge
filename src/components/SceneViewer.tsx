@@ -1,19 +1,25 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import type { ReactNode } from 'react'
 import MovementSlider from './MovementSlider'
-import SectionSlider from './SectionSlider'
 import { Viewer } from '../viewer/Viewer'
 import type { ViewerMode } from '../viewer/Viewer'
 import type { BlastBoundaries } from '../data/blastBoundary'
 import type { BlastHole } from '../data/blastHoles'
 import type { ColourScale } from '../data/blockColours'
 import type { Block, BlockModels, CategorySelection } from '../data/blockModels'
+import type { SurveySurfaces } from '../data/surveySurfaces'
 
 interface SceneViewerProps {
   models: BlockModels
   blastBoundaries: BlastBoundaries
   blastHoles: readonly BlastHole[]
+  showBlastHoles: boolean
+  showConnections: boolean
+  getSurfaces: () => SurveySurfaces | null
+  showSurfaces: boolean
   colourScale: ColourScale
   mode: ViewerMode
+  onModeChange: (mode: ViewerMode) => void
   sidebarOpen: boolean
   onToggleSidebar: () => void
   filtered: boolean
@@ -26,20 +32,20 @@ interface SceneViewerProps {
   movementCount: number
   categorySelection: CategorySelection | null
   onSliceChange: (position: number) => void
-  onToggleSlicer: () => void
-  onInspectSection?: () => void
+  playbackOverlays: ReactNode
 }
 
-const toolButton = 'inline-flex min-h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900/95 px-2.5 py-1.5 text-xs font-medium text-neutral-300 hover:bg-neutral-800 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 disabled:cursor-default disabled:opacity-40'
-const overlayButton = toolButton + ' aria-pressed:border-neutral-400 aria-pressed:bg-neutral-700 aria-pressed:text-white'
+const breadcrumbButton = 'pointer-events-auto cursor-pointer rounded-xs text-left hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300'
 
-export default function SceneViewer({ models, blastBoundaries, blastHoles, colourScale, mode, sidebarOpen, onToggleSidebar, filtered, slicePosition, getMovementBlocks, getVisibleBlocks, visibleCount, movementCount, categorySelection, selectedBlock, onSelectBlock, onSliceChange, onToggleSlicer, onInspectSection }: SceneViewerProps) {
+export default function SceneViewer({
+  models, blastBoundaries, blastHoles, showBlastHoles, showConnections, getSurfaces, showSurfaces,
+  colourScale, mode, onModeChange, sidebarOpen, onToggleSidebar, filtered, slicePosition, getMovementBlocks,
+  getVisibleBlocks, visibleCount, movementCount, categorySelection, selectedBlock, onSelectBlock,
+  onSliceChange, playbackOverlays,
+}: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
-  const slicerButtonRef = useRef<HTMLButtonElement>(null)
-  const [showConnections, setShowConnections] = useState(false)
-  const [showBlastHoles, setShowBlastHoles] = useState(false)
-  const sliceInactive = mode === 'model'
+  const surfaces = getSurfaces()
   const visibleBlocks = getVisibleBlocks()
   const movementBlocks = getMovementBlocks()
   const firstMovingBlock = useMemo(() => movementBlocks?.findIndex((block) => block.movementDistance > 0) ?? -1, [movementBlocks])
@@ -62,13 +68,15 @@ export default function SceneViewer({ models, blastBoundaries, blastHoles, colou
 
   useEffect(() => viewerRef.current?.setBlastHolesVisible(showBlastHoles), [models, showBlastHoles])
 
+  useEffect(() => {
+    if (surfaces) viewerRef.current?.setSurveySurfaces(surfaces)
+  }, [models, surfaces])
+
+  useEffect(() => viewerRef.current?.setSurveySurfacesVisible(showSurfaces), [models, showSurfaces])
+
   useEffect(() => viewerRef.current?.setVisibleBlocks(visibleBlocks), [models, visibleBlocks])
 
-  useEffect(() => {
-    const sidebarWidth = 320
-    const sidebarSpacing = 24 * 2
-    viewerRef.current?.setMode(mode, sidebarWidth + sidebarSpacing)
-  }, [models, mode])
+  useEffect(() => viewerRef.current?.setMode(mode), [models, mode])
 
   useEffect(() => viewerRef.current?.setSidebarOpen(sidebarOpen), [models, sidebarOpen])
 
@@ -112,75 +120,60 @@ export default function SceneViewer({ models, blastBoundaries, blastHoles, colou
         aria-controls="viewer-sidebar"
         aria-description={!sidebarOpen && filtered ? 'Colour filter active' : undefined}
         onClick={onToggleSidebar}
-        className="relative z-20 col-start-1 row-start-1 grid size-10 cursor-pointer place-items-center justify-self-start rounded-xl border border-white/10 bg-neutral-900/95 text-neutral-300 hover:bg-neutral-800 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 sm:absolute sm:top-6 sm:left-6 sm:aria-expanded:rounded-tr-none sm:aria-expanded:rounded-bl-none sm:aria-expanded:border-transparent sm:aria-expanded:bg-transparent sm:aria-expanded:hover:bg-white/5"
+        className="relative z-20 col-start-1 row-start-1 grid h-10 w-[var(--viewer-toggle-width)] cursor-pointer place-items-center self-start justify-self-start rounded-md border border-neutral-700 bg-neutral-900/95 text-neutral-300 shadow-lg hover:bg-neutral-800 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 sm:absolute sm:top-[var(--viewer-inset)] sm:left-[var(--viewer-inset)] sm:aria-expanded:w-[var(--viewer-sidebar-width)] sm:aria-expanded:justify-items-start sm:aria-expanded:rounded-b-none sm:aria-expanded:border-transparent sm:aria-expanded:bg-transparent sm:aria-expanded:pl-[9px] sm:aria-expanded:shadow-none sm:aria-expanded:hover:bg-white/5"
       >
         <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" className="size-5">
           {sidebarOpen && <path d="M5 5h4v14H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="currentColor" fillOpacity=".35" stroke="none" />}
           <rect x="3" y="5" width="18" height="14" rx="2" />
           <path d="M9 5v14" />
         </svg>
-        {!sidebarOpen && filtered && <span aria-hidden="true" className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-amber-400" />}
       </button>
+      <header className={'pointer-events-none relative z-20 col-start-1 row-start-1 ml-[calc(var(--viewer-toggle-width)_+_0.75rem)] min-w-0 self-start sm:absolute sm:top-[var(--viewer-inset)] sm:right-[var(--viewer-inset)] sm:ml-0 sm:transition-[left] sm:duration-200 sm:ease-out motion-reduce:transition-none ' + (sidebarOpen ? 'sm:left-[var(--viewer-sidebar-offset)]' : 'sm:left-[calc(var(--viewer-toggle-width)_+_2_*_var(--viewer-inset))]')}>
+        <div className="flex h-[var(--viewer-header-height)] w-fit max-w-full flex-col justify-center gap-1 rounded-md border border-neutral-700 bg-neutral-900/95 px-2.5 py-2 shadow-lg sm:max-w-[calc(100%_-_4rem)] md:max-w-[calc(100%_-_7rem)] lg:px-5">
+          <h1 className="text-xs leading-5 font-semibold text-neutral-100 min-[400px]:text-sm lg:text-base">OMP blast movement</h1>
+          <div className="flex items-center gap-1">
+            {mode === 'model' ? (
+              <p className="text-[11px] text-neutral-400 md:text-xs" aria-live="polite">Model overview</p>
+            ) : (
+              <nav aria-label="Breadcrumb" aria-live="polite" className="text-[10px] whitespace-nowrap text-neutral-400 min-[360px]:text-[11px] md:text-xs">
+                <button
+                  type="button"
+                  onClick={() => onModeChange('slice')}
+                  aria-current={mode === 'slice' ? 'location' : undefined}
+                  className={breadcrumbButton + ' aria-[current=location]:text-neutral-300'}
+                >
+                  Slice
+                </button>
+                {mode === 'inspect' && (
+                  <>
+                    {' '}<span aria-hidden="true">/</span>{' '}
+                    <button type="button" onClick={() => onModeChange('inspect')} aria-current="location" className={breadcrumbButton + ' text-neutral-300'}>
+                      Slice inspection
+                    </button>
+                  </>
+                )}
+              </nav>
+            )}
+          </div>
+        </div>
+      </header>
       <button
         type="button"
+        aria-label="Reset view"
+        title="Reset view"
         onClick={() => {
           if (selectedBlock) onSelectBlock(null)
           else viewerRef.current?.resetView()
         }}
-        className={toolButton + ' z-10 col-start-2 row-start-1 justify-self-end sm:absolute sm:top-6 sm:right-6'}
+        className="z-10 col-start-2 row-start-1 inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center gap-1.5 self-start justify-self-end rounded-md border border-neutral-700 bg-neutral-900/95 px-2.5 py-1.5 text-xs font-medium text-neutral-300 shadow-lg hover:bg-neutral-800 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 sm:absolute sm:top-[var(--viewer-inset)] sm:right-[var(--viewer-inset)]"
       >
-        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="size-4">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="size-5">
           <path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5" />
           <circle cx="12" cy="12" r="2" />
         </svg>
-        Reset view
+        <span className="hidden min-[400px]:inline sm:hidden md:inline">Reset view</span>
       </button>
-      <div className={'pointer-events-none z-10 col-span-full row-start-3 flex w-full flex-col gap-2 sm:absolute sm:right-6 sm:bottom-6 sm:w-auto sm:transition-[left] sm:duration-200 sm:ease-out motion-reduce:transition-none lg:flex-row lg:gap-3 ' + (sidebarOpen ? 'sm:left-92' : 'sm:left-6')}>
-        <section aria-label="Slicer controls" className="pointer-events-auto relative min-w-0 rounded-xl border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs text-neutral-300 shadow-lg lg:flex-1">
-          <div className="flex min-h-8 items-center justify-between gap-1">
-            <button
-              ref={slicerButtonRef}
-              type="button"
-              aria-controls={mode === 'inspect' ? undefined : 'section-position-controls'}
-              aria-expanded={mode === 'inspect' ? undefined : !sliceInactive}
-              onClick={onToggleSlicer}
-              className={toolButton + ' px-2!' + (sliceInactive ? ' absolute inset-0 m-auto h-9 w-fit' : '')}
-            >
-              <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" className="size-[18px]">
-                {mode === 'inspect' ? (
-                  <path d="M19 12H5m6-6-6 6 6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                ) : (
-                  <path d="M4.5 4.5h9L8 19.5H4.5A1.5 1.5 0 0 1 3 18V6a1.5 1.5 0 0 1 1.5-1.5Zm12.5 0h2.5A1.5 1.5 0 0 1 21 6v12a1.5 1.5 0 0 1-1.5 1.5h-8Z" />
-                )}
-              </svg>
-              {sliceInactive ? 'Slice model' : mode === 'slice' ? 'Exit slice' : 'Back to slice'}
-            </button>
-            {mode === 'slice' && (
-              <button
-                type="button"
-                disabled={!onInspectSection}
-                onClick={() => {
-                  slicerButtonRef.current?.focus()
-                  onInspectSection?.()
-                }}
-                className={toolButton + ' ml-auto px-2!'}
-              >
-                Inspect section
-                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="size-3.5">
-                  <path d="M5 12h14m-6-6 6 6-6 6" />
-                </svg>
-              </button>
-            )}
-          </div>
-          <div id="section-position-controls" className={sliceInactive ? 'invisible' : undefined}>
-            <SectionSlider
-              blocks={models.pre}
-              position={slicePosition}
-              disabled={sliceInactive || selectedBlock !== null}
-              onChange={onSliceChange}
-            />
-          </div>
-        </section>
+      <div className={'pointer-events-none z-10 col-span-full row-start-3 w-full sm:absolute sm:right-[var(--viewer-inset)] sm:bottom-[var(--viewer-inset)] sm:w-auto sm:transition-[left] sm:duration-200 sm:ease-out motion-reduce:transition-none ' + (sidebarOpen ? 'sm:left-[var(--viewer-sidebar-offset)]' : 'sm:left-[var(--viewer-inset)]')}>
         <MovementSlider
           mode={mode}
           getMovementBlocks={getMovementBlocks}
@@ -188,37 +181,7 @@ export default function SceneViewer({ models, blastBoundaries, blastHoles, colou
           disabled={firstMovingBlock < 0 || firstMovingBlock >= movementCount}
           onChange={(progress) => viewerRef.current?.setMovementProgress(progress)}
         >
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-2">
-            <span className="flex items-center gap-1.5 text-neutral-400">
-              <span aria-hidden="true" className="w-3 border-t border-neutral-500" />
-              Blast boundary
-            </span>
-            <div role="group" aria-label="Overlays" className="ml-auto flex flex-wrap justify-end gap-1.5">
-              <button
-                type="button"
-                aria-pressed={showBlastHoles}
-                disabled={!blastHoles.length}
-                title={blastHoles.length ? undefined : 'Blast hole data unavailable'}
-                onClick={() => setShowBlastHoles((show) => !show)}
-                className={overlayButton}
-              >
-                <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-400" />
-                Blast holes
-              </button>
-              {mode === 'inspect' && !selectedBlock && (
-                <button
-                  type="button"
-                  aria-label="Movement connections"
-                  aria-pressed={showConnections}
-                  onClick={() => setShowConnections((show) => !show)}
-                  className={overlayButton}
-                >
-                  <span aria-hidden="true" className="w-3 border-t border-dashed border-neutral-400" />
-                  Connections
-                </button>
-              )}
-            </div>
-          </div>
+          {playbackOverlays}
         </MovementSlider>
       </div>
     </>

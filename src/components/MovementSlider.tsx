@@ -62,7 +62,7 @@ export default function MovementSlider({ mode, getMovementBlocks, movementCount,
   const playbackLabel = playing ? 'Pause' : progress === 1 ? 'Replay' : 'Play'
 
   return (
-    <section aria-label="Predicted material movement" className="pointer-events-auto flex min-w-0 flex-col justify-between gap-2 rounded-xl border border-neutral-700 bg-neutral-900/95 px-3 py-2 text-xs text-neutral-300 shadow-lg lg:flex-1">
+    <section aria-label="OMP playback" className="pointer-events-auto mx-auto w-full max-w-xl space-y-3 rounded-md border border-neutral-700 bg-neutral-900/95 p-4 text-xs text-neutral-300 shadow-lg">
       <div className="flex items-center gap-3">
         <button type="button" aria-label={playbackLabel} title={playbackLabel} disabled={disabled} onClick={togglePlayback} className="grid size-10 shrink-0 cursor-pointer place-items-center rounded-sm border border-neutral-600 text-neutral-200 hover:border-neutral-400 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 disabled:cursor-default disabled:opacity-40">
           <svg aria-hidden="true" viewBox="0 0 24 24" className="size-8">
@@ -99,7 +99,9 @@ export default function MovementSlider({ mode, getMovementBlocks, movementCount,
           </div>
         </div>
       </div>
-      {children}
+      <div className="space-y-2 border-t border-white/10 pt-3">
+        {children}
+      </div>
     </section>
   )
 }
