@@ -19,21 +19,22 @@ export default function SectionSummary({ blocks, totalCount }: SectionSummaryPro
   }, [blocks])
 
   return (
-    <section aria-label="Section movement summary" className="space-y-2 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-medium text-neutral-100">Predicted movement</h2>
-        <span className="text-neutral-400">{blocks.length.toLocaleString()}{blocks.length !== totalCount && ' of ' + totalCount.toLocaleString()} blocks</span>
+    <section aria-label="Section movement summary" className="space-y-3 p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+        <h2 className="text-sm font-medium text-neutral-100">Predicted section movement</h2>
+        <span className="text-neutral-400 tabular-nums">{blocks.length.toLocaleString()}{blocks.length !== totalCount && ' of ' + totalCount.toLocaleString()} blocks</span>
       </div>
-      <dl className="grid grid-cols-2 gap-3">
+      <dl className="grid grid-cols-2 gap-4">
         <div>
           <dt className="text-neutral-400">Mean movement</dt>
-          <dd className="mt-1 text-lg tabular-nums text-neutral-100">{stats ? stats.mean.toFixed(1) + ' m' : '—'}</dd>
+          <dd className="mt-1 text-2xl leading-tight font-semibold tracking-tight text-neutral-100 tabular-nums">{stats ? stats.mean.toFixed(1) + ' m' : '—'}</dd>
         </div>
         <div>
           <dt className="text-neutral-400">Furthest movement</dt>
-          <dd className="mt-1 text-lg tabular-nums text-neutral-100">{stats ? stats.furthest.toFixed(1) + ' m' : '—'}</dd>
+          <dd className="mt-1 text-2xl leading-tight font-semibold tracking-tight text-neutral-100 tabular-nums">{stats ? stats.furthest.toFixed(1) + ' m' : '—'}</dd>
         </div>
       </dl>
+      {stats && <p className="text-neutral-400">Select a block to compare its positions.</p>}
     </section>
   )
 }
