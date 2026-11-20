@@ -1,12 +1,12 @@
 import { categoryFields, gradeFields } from "../data/blockModels";
 import type { ReactNode } from "react";
-import type { ColourField, GradeFilter } from "../data/blockModels";
+import type { ColourField } from "../data/blockModels";
 import { colourCss, gradientStops } from "../data/blockColours";
 import type { ColourScale } from "../data/blockColours";
 
 interface ColourPaletteProps {
   scale: ColourScale;
-  gradeFilter: GradeFilter | null;
+  minimum: number | null;
   categoryCode: number | null;
   onCategoryCodeChange: (value: number | null) => void;
   children?: ReactNode;
@@ -20,7 +20,7 @@ const format = (value: number): string =>
 
 const codeButton = "flex cursor-pointer items-center gap-2 rounded-md border border-neutral-700 bg-neutral-800/40 px-3 py-2 text-left text-neutral-300 hover:bg-neutral-800 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:border-neutral-400 aria-pressed:bg-neutral-700 aria-pressed:text-white";
 
-export default function ColourPalette({ scale, onChange, collapsed, onToggle, gradeFilter, categoryCode, onCategoryCodeChange, children }: ColourPaletteProps) {
+export default function ColourPalette({ scale, onChange, collapsed, onToggle, minimum, categoryCode, onCategoryCodeChange, children }: ColourPaletteProps) {
   const categorical = scale.kind === "category";
   const fields = categorical ? categoryFields : scale.kind === "grade" ? gradeFields : [];
 
@@ -113,8 +113,8 @@ export default function ColourPalette({ scale, onChange, collapsed, onToggle, gr
           </div>
         )}
       </div>
-      {collapsed && gradeFilter && (
-        <p className="text-neutral-400">Minimum {gradeFilter.field} ≥ {format(gradeFilter.minimum)}</p>
+      {collapsed && minimum !== null && (
+        <p className="text-neutral-400">{scale.kind === "movement" ? "Distance moved" : "Grade"} ≥ {minimum.toLocaleString(undefined, { maximumSignificantDigits: 4 })}{scale.kind === "movement" && " m"}</p>
       )}
       {collapsed && categoryCode !== null && (
         <p className="text-neutral-400">Code {format(categoryCode)} selected</p>

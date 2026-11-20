@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import SceneViewer from './components/SceneViewer'
 import ColourPalette from './components/ColourPalette'
-import GradeFilterControls from './components/GradeFilterControls'
+import MinimumFilterControls from './components/MinimumFilterControls'
 import CrossSectionPanel from './components/CrossSectionPanel'
 import SectionSlider from './components/SectionSlider'
 import BlockInspector from './components/BlockInspector'
 import SectionSummary from './components/SectionSummary'
-import { createColourScales } from './data/blockColours'
+import { colourValue, countMinimumMatches, createColourScales } from './data/blockColours'
 import { csvFiles } from './data/csvFiles'
-import { categoryFields, createBlockModels, countGradeMatches } from './data/blockModels'
+import { categoryFields, createBlockModels } from './data/blockModels'
 import { createBlastBoundarySegments } from './data/blastBoundary'
 import type { BlastBoundaries } from './data/blastBoundary'
-import type { Block, BlockModels, CategorySelection, ColourField, GradeField, GradeFilter } from './data/blockModels'
+import type { Block, BlockModels, CategorySelection, ColourField } from './data/blockModels'
 import type { ViewerMode } from './viewer/Viewer'
 import { loadCsv } from './utils/loadCsv'
 
@@ -24,7 +24,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null)
   const [categorySelection, setCategorySelection] = useState<CategorySelection | null>(null)
-  const [filteredGrade, setFilteredGrade] = useState<{ filter: GradeFilter; blocks: readonly Block[] } | null>(null)
+  const [minimumFilter, setMinimumFilter] = useState<{ minimum: number; blocks: readonly Block[] } | null>(null)
   const [mode, setMode] = useState<ViewerMode>('model')
   const [slicePosition, setSlicePosition] = useState<number | null>(null)
   const [paletteCollapsed, setPaletteCollapsed] = useState(false)
@@ -33,16 +33,16 @@ export default function App() {
 
   const colourScales = useMemo(() => createColourScales(models?.pre ?? emptyBlocks), [models])
   const colourScale = colourScales.get(colourField)
-  const gradeFilter = filteredGrade?.filter ?? null
-  const orderedBlocks = filteredGrade?.blocks ?? models?.pre ?? emptyBlocks
+  const minimum = minimumFilter?.minimum ?? null
+  const orderedBlocks = minimumFilter?.blocks ?? models?.pre ?? emptyBlocks
 
-  const visibleCount = countGradeMatches(orderedBlocks, gradeFilter)
+  const visibleCount = countMinimumMatches(orderedBlocks, colourField, minimum)
 
   const categoryBlocks = useMemo(() => categorySelection
     ? orderedBlocks.filter((block) => block.attributes[categorySelection.field] === categorySelection.value)
     : null, [orderedBlocks, categorySelection])
 
-  const modelBlocks = categoryBlocks ?? filteredGrade?.blocks ?? null
+  const modelBlocks = categoryBlocks ?? minimumFilter?.blocks ?? null
   const modelCount = categoryBlocks?.length ?? visibleCount
 
   const sectionBlocks = useMemo(() => {
@@ -54,9 +54,9 @@ export default function App() {
     ? sectionBlocks.filter((block) => block.attributes[categorySelection.field] === categorySelection.value)
     : sectionBlocks, [sectionBlocks, categorySelection])
 
-  const trackedBlocks = useMemo(() => gradeFilter
-    ? sectionCohort.slice(0, countGradeMatches(sectionCohort, gradeFilter))
-    : sectionCohort, [sectionCohort, gradeFilter])
+  const trackedBlocks = useMemo(() => minimum === null
+    ? sectionCohort
+    : sectionCohort.slice(0, countMinimumMatches(sectionCohort, colourField, minimum)), [sectionCohort, colourField, minimum])
 
   const movementBlocks = mode === 'inspect' ? sectionCohort : mode === 'model' ? modelBlocks : null
   const movementCount = mode === 'inspect' ? trackedBlocks.length : movementBlocks ? modelCount : 0
@@ -99,9 +99,9 @@ export default function App() {
   const changeColourField = (field: ColourField): void => {
     if (field === colourField) return
     setColourField(field)
-    setFilteredGrade(null)
+    setMinimumFilter(null)
     setCategorySelection(null)
-    if (gradeFilter || categorySelection) setSelectedBlock(null)
+    if (minimumFilter || categorySelection) setSelectedBlock(null)
   }
 
   const changeCategoryCode = (value: number | null): void => {
@@ -111,19 +111,17 @@ export default function App() {
     setSelectedBlock(null)
   }
 
-  const changeGradeFilter = (filter: GradeFilter | null): void => {
-    if (filter && models) {
-      const grade = (block: Block): number => {
-        const value = block.attributes[filter.field]
+  const changeMinimum = (minimum: number | null): void => {
+    if (minimum !== null && models) {
+      const sortableValue = (block: Block): number => {
+        const value = colourValue(block, colourField)
         return value !== null && Number.isFinite(value) ? value : -Infinity
       }
       // The renderer hides the suffix by updating its instance count.
-      const blocks = filteredGrade?.filter.field === filter.field
-        ? filteredGrade.blocks
-        : [...models.pre].sort((a, b) => grade(b) - grade(a))
-      setFilteredGrade({ filter, blocks })
+      const blocks = minimumFilter?.blocks ?? [...models.pre].sort((a, b) => sortableValue(b) - sortableValue(a))
+      setMinimumFilter({ minimum, blocks })
     } else {
-      setFilteredGrade(null)
+      setMinimumFilter(null)
     }
     setSelectedBlock(null)
   }
@@ -134,10 +132,10 @@ export default function App() {
         <>
           <SceneViewer models={models} blastBoundaries={blastBoundaries} colourScale={colourScale} mode={mode} slicePosition={slicePosition} getVisibleBlocks={getVisibleBlocks} getMovementBlocks={getMovementBlocks} visibleCount={visibleCount} movementCount={movementCount} categorySelection={categorySelection} selectedBlock={selectedBlock} onSelectBlock={setSelectedBlock} onSliceChange={setSlicePosition} />
           <div className="absolute top-20 left-6 z-10 flex w-80 max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)]">
-            <ColourPalette scale={colourScale} onChange={changeColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} gradeFilter={gradeFilter} categoryCode={categorySelection?.value ?? null} onCategoryCodeChange={changeCategoryCode}>
-              {colourScale.kind === 'grade' && <GradeFilterControls field={colourField as GradeField} scale={colourScale} filter={gradeFilter} onChange={changeGradeFilter} />}
+            <ColourPalette scale={colourScale} onChange={changeColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} minimum={minimum} categoryCode={categorySelection?.value ?? null} onCategoryCodeChange={changeCategoryCode}>
+              {colourScale.kind !== 'category' && <MinimumFilterControls scale={colourScale} minimum={minimum} onChange={changeMinimum} />}
             </ColourPalette>
-            {mode !== 'model' && slicePosition !== null && <CrossSectionPanel blocks={trackedBlocks} scale={colourScale} filtered={categorySelection !== null || gradeFilter !== null} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
+            {mode !== 'model' && slicePosition !== null && <CrossSectionPanel blocks={trackedBlocks} scale={colourScale} filtered={categorySelection !== null || minimum !== null} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
             {mode === 'inspect' && slicePosition !== null && !selectedBlock && (
               <SectionSlider blocks={models.pre} position={slicePosition} onChange={(position) => { setSlicePosition(position); setSelectedBlock(null) }} />
             )}

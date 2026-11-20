@@ -32,30 +32,6 @@ export interface CategorySelection {
   value: number
 }
 
-export interface GradeFilter {
-  field: GradeField
-  minimum: number
-}
-
-export function matchesGradeFilter(block: Block, filter: GradeFilter | null): boolean {
-  if (!filter) return true
-  const value = block.attributes[filter.field]
-  return value !== null && Number.isFinite(value) && value >= filter.minimum
-}
-
-// Blocks are ordered from highest grade to lowest.
-export function countGradeMatches(blocks: readonly Block[], filter: GradeFilter | null): number {
-  if (!filter) return blocks.length
-  let low = 0
-  let high = blocks.length
-  while (low < high) {
-    const middle = Math.floor((low + high) / 2)
-    if (matchesGradeFilter(blocks[middle], filter)) low = middle + 1
-    else high = middle
-  }
-  return low
-}
-
 export type ModelView = keyof BlockModels
 
 export function createBlockModels(rows: CsvRow[]): BlockModels {

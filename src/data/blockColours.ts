@@ -15,6 +15,20 @@ export type ColourScale = { field: ColourField; missingCount: number } & (
 export const colourValue = (block: Block, field: ColourField): number | null =>
   field === "movementDistance" ? block.movementDistance : block.attributes[field];
 
+// Blocks are ordered by descending value, with missing values last.
+export function countMinimumMatches(blocks: readonly Block[], field: ColourField, minimum: number | null): number {
+  if (minimum === null) return blocks.length;
+  let low = 0;
+  let high = blocks.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    const value = colourValue(blocks[middle], field);
+    if (value !== null && Number.isFinite(value) && value >= minimum) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
 export function createColourScale(
   blocks: readonly Block[],
   field: ColourField,
