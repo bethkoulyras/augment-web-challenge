@@ -3,7 +3,7 @@
 :root {
   font-family: system-ui, sans-serif;
   color-scheme: dark;
-  background: #181818;
+  background: #141414;
   color: #f3f4f6;
 }
 
@@ -17,4 +17,31 @@ body,
 
 canvas {
   display: block;
+}
+
+.northing-slider::-webkit-slider-runnable-track {
+  height: 1px;
+  background: #737373;
+}
+
+.northing-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 3px;
+  height: 17px;
+  margin-top: -8px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.northing-slider::-moz-range-track {
+  height: 1px;
+  background: #737373;
+}
+
+.northing-slider::-moz-range-thumb {
+  width: 3px;
+  height: 17px;
+  border: 0;
+  border-radius: 1px;
+  background: currentColor;
 }

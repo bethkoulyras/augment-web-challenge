@@ -20,7 +20,7 @@ export default function BlockInspector({ block, models, field, onClear }: BlockI
   const distance = block?.movementDistance ?? null
 
   return (
-    <section aria-label="Block inspector" className="shrink-0 space-y-3 rounded-2xl border border-white/10 bg-neutral-900/95 p-4 text-xs text-neutral-300 shadow-2xl">
+    <section aria-label="Block inspector" className="space-y-3 p-3">
       {block ? (
         <>
           <div className="flex items-center justify-between gap-3">

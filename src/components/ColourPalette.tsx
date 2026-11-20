@@ -6,12 +6,9 @@ import type { ColourScale } from "../data/blockColours";
 
 interface ColourPaletteProps {
   scale: ColourScale;
-  minimum: number | null;
   categoryCode: number | null;
   onCategoryCodeChange: (value: number | null) => void;
   children?: ReactNode;
-  collapsed: boolean;
-  onToggle: () => void;
   onChange: (field: ColourField) => void;
 }
 
@@ -20,28 +17,19 @@ const format = (value: number): string =>
 
 const codeButton = "flex cursor-pointer items-center gap-2 rounded-md border border-neutral-700 bg-neutral-800/40 px-3 py-2 text-left text-neutral-300 hover:bg-neutral-800 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:border-neutral-400 aria-pressed:bg-neutral-700 aria-pressed:text-white";
 
-export default function ColourPalette({ scale, onChange, collapsed, onToggle, minimum, categoryCode, onCategoryCodeChange, children }: ColourPaletteProps) {
+export default function ColourPalette({ scale, onChange, categoryCode, onCategoryCodeChange, children }: ColourPaletteProps) {
   const categorical = scale.kind === "category";
   const fields = categorical ? categoryFields : scale.kind === "grade" ? gradeFields : [];
 
   return (
-    <section
-      aria-label="Block colour palette"
-      className="shrink-0 space-y-4 rounded-2xl border border-white/10 bg-neutral-900/95 p-4 text-xs text-neutral-300 shadow-2xl backdrop-blur-md"
-    >
-      <button
-        type="button"
-        aria-label={collapsed ? "Expand colour palette" : "Minimise colour palette"}
-        aria-expanded={!collapsed}
-        aria-controls="colour-palette-controls"
-        onClick={onToggle}
-        className="flex w-full cursor-pointer items-center justify-between gap-3 rounded text-left focus-visible:outline-2 focus-visible:outline-neutral-300"
-      >
-        <span>Colour by <span className="ml-2 font-mono text-neutral-200">{scale.kind === "movement" ? "Movement (m)" : scale.field}</span></span>
-        <span aria-hidden="true">{collapsed ? "▾" : "▴"}</span>
-      </button>
-
-      <div id="colour-palette-controls" hidden={collapsed} className="space-y-4">
+    <section aria-label="Colour palette" className="space-y-4 p-3">
+      <h2 className="flex items-center gap-2 font-mono text-neutral-200">
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" className="size-4 text-neutral-400">
+          <path fillRule="evenodd" d="M12 3a9 9 0 1 0 0 18h1.2a1.9 1.9 0 0 0 1.45-3.12 1.1 1.1 0 0 1 .85-1.8H17a4 4 0 0 0 4-4A9 9 0 0 0 12 3ZM8 8.7a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Zm4-2a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Zm4 2a1.3 1.3 0 1 0 0 2.6 1.3 1.3 0 0 0 0-2.6Z" />
+        </svg>
+        {scale.kind === "movement" ? "Movement (m)" : scale.field}
+      </h2>
+      <div className="space-y-4">
         <div
           role="group"
           aria-label="Colour field type"
@@ -57,7 +45,7 @@ export default function ColourPalette({ scale, onChange, collapsed, onToggle, mi
               type="button"
               aria-pressed={scale.kind === kind}
               onClick={() => { if (scale.kind !== kind) onChange(field); }}
-              className="cursor-pointer rounded-md px-2 py-2 text-neutral-500 transition-colors hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:bg-neutral-800 aria-pressed:text-white"
+              className="cursor-pointer rounded-md px-0.5 py-2 text-[11px] text-neutral-500 transition-colors hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:bg-neutral-800 aria-pressed:text-white sm:px-2 sm:text-xs"
             >
               {label}
             </button>
@@ -113,12 +101,6 @@ export default function ColourPalette({ scale, onChange, collapsed, onToggle, mi
           </div>
         )}
       </div>
-      {collapsed && minimum !== null && (
-        <p className="text-neutral-400">{scale.kind === "movement" ? "Distance moved" : "Grade"} ≥ {minimum.toLocaleString(undefined, { maximumSignificantDigits: 4 })}{scale.kind === "movement" && " m"}</p>
-      )}
-      {collapsed && categoryCode !== null && (
-        <p className="text-neutral-400">Code {format(categoryCode)} selected</p>
-      )}
 
       {scale.kind !== "category" && (
         <div aria-label="Colour legend" className="space-y-2 border-t border-white/10 pt-4">

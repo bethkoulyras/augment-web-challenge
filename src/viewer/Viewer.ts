@@ -38,7 +38,7 @@ import type { Block, BlockModels, CategorySelection } from '../data/blockModels'
 
 export type ViewerMode = 'model' | 'slice' | 'inspect'
 
-const inspectionPadding = { top: 104, bottom: 120, sides: 24 }
+const inspectionPadding = { top: 64, bottom: 216, sides: 24 }
 
 export class Viewer {
   private readonly scene = new Scene()
@@ -86,6 +86,8 @@ export class Viewer {
   private slicer: SlicePlane | null = null
   private savedCamera: { position: Vector3; target: Vector3 } | null = null
   private sidebarWidth = 0
+  private sidebarProgress = 1
+  private sidebarMove: { from: number; to: number; startedAt: number } | null = null
   private cameraMove: {
     fromPosition: Vector3
     toPosition: Vector3
@@ -400,7 +402,7 @@ export class Viewer {
     const radius = Math.max(bounds.getSize(new Vector3()).length() / 2, 1)
     const verticalFov = MathUtils.degToRad(this.camera.fov)
     const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * this.camera.aspect)
-    const distance = radius / Math.sin(Math.min(verticalFov, horizontalFov) / 2) * 1.1
+    const distance = radius / Math.sin(Math.min(verticalFov, horizontalFov) / 2)
     this.camera.position.copy(centre).addScaledVector(new Vector3(1, 0.9, 1.3).normalize(), distance)
     this.camera.near = Math.min(this.camera.near, Math.max(radius / 1000, 0.01))
     this.camera.far = Math.max(this.camera.far, distance * 10 + radius)
@@ -417,7 +419,7 @@ export class Viewer {
     for (const box of boxes) bounds.union(box)
     const centre = bounds.getCenter(new Vector3())
     const radius = Math.max(bounds.getSize(new Vector3()).length() / 2, 1)
-    const availableWidth = Math.max(width - Math.min(this.sidebarWidth, width * 0.45) - inspectionPadding.sides * 2, 1)
+    const availableWidth = Math.max(width - this.getSidebarWidth(width) - inspectionPadding.sides * 2, 1)
     const availableHeight = Math.max(height - inspectionPadding.top - inspectionPadding.bottom, 1)
     const tanHalfFov = Math.tan(MathUtils.degToRad(this.camera.fov) / 2)
     const horizontalLimit = tanHalfFov * availableWidth / height / 1.04
@@ -574,17 +576,51 @@ export class Viewer {
     if (this.movement) this.frameBlocks([...this.movement.pre.slice(0, this.movement.count), ...this.movement.post.slice(0, this.movement.count)])
   }
 
+  public resetView(): void {
+    if (this.mode === 'inspect' && this.movement?.count) {
+      this.frameSection()
+      return
+    }
+    this.cameraMove = null
+    this.clearHover()
+    this.frameBounds(this.mesh.boundingBox!)
+    this.render()
+  }
+
+  public setSidebarOpen(open: boolean): void {
+    const to = open ? 1 : 0
+    if (this.sidebarProgress === to) {
+      this.sidebarMove = null
+      return
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      this.sidebarMove = null
+      this.sidebarProgress = to
+      this.resize()
+      return
+    }
+    this.sidebarMove = { from: this.sidebarProgress, to, startedAt: performance.now() }
+    this.render()
+  }
+
+  private getSidebarWidth(width: number): number {
+    return width < 640 ? 0 : Math.min(this.sidebarWidth, width * 0.45)
+  }
+
+  private updateViewportProjection(width: number, height: number): void {
+    const fullSidebarWidth = this.getSidebarWidth(width)
+    const sidebarWidth = fullSidebarWidth * this.sidebarProgress
+    const rightOffset = this.mode === 'inspect' ? Math.max(width - sidebarWidth - inspectionPadding.sides * 2, 1) * 0.015 : 0
+    const verticalOffset = (inspectionPadding.bottom - inspectionPadding.top) / 2
+    this.camera.zoom = 1 + (fullSidebarWidth - sidebarWidth) / width
+    this.camera.setViewOffset(width, height, -sidebarWidth / 2 - rightOffset, verticalOffset, width, height)
+  }
+
   private readonly resize = (): void => {
     if (this.disposed) return
     const { clientWidth: width, clientHeight: height } = this.container
     if (width === 0 || height === 0) return
-    this.camera.aspect = width / height
-    const sidebarWidth = Math.min(this.sidebarWidth, width * 0.45)
-    const rightOffset = this.mode === 'inspect' ? Math.max(width - sidebarWidth - inspectionPadding.sides * 2, 1) * 0.015 : 0
-    const verticalOffset = this.mode === 'inspect' ? (inspectionPadding.bottom - inspectionPadding.top) / 2 : 0
-    if (sidebarWidth) this.camera.setViewOffset(width, height, -sidebarWidth / 2 - rightOffset, verticalOffset, width, height)
-    else this.camera.clearViewOffset()
-    this.camera.updateProjectionMatrix()
+    this.updateViewportProjection(width, height)
     this.renderer.setSize(width, height)
     this.clearHover()
     this.render()
@@ -595,6 +631,14 @@ export class Viewer {
     this.renderFrame = requestAnimationFrame((time) => {
       this.renderFrame = null
       if (this.disposed) return
+      const sidebarMove = this.sidebarMove
+      if (sidebarMove) {
+        const progress = MathUtils.clamp((time - sidebarMove.startedAt) / 200, 0, 1)
+        this.sidebarProgress = MathUtils.lerp(sidebarMove.from, sidebarMove.to, 1 - (1 - progress) ** 3)
+        const { clientWidth: width, clientHeight: height } = this.container
+        if (width && height) this.updateViewportProjection(width, height)
+        if (progress === 1) this.sidebarMove = null
+      }
       const move = this.cameraMove
       if (move) {
         const progress = Math.min((time - move.startedAt) / 650, 1)
@@ -605,7 +649,7 @@ export class Viewer {
         if (progress === 1) this.cameraMove = null
       }
       this.renderer.render(this.scene, this.camera)
-      if (this.cameraMove) this.render()
+      if (this.cameraMove || this.sidebarMove) this.render()
     })
   }
 }

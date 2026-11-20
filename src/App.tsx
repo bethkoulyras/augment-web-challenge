@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import SceneViewer from './components/SceneViewer'
 import ColourPalette from './components/ColourPalette'
 import MinimumFilterControls from './components/MinimumFilterControls'
 import CrossSectionPanel from './components/CrossSectionPanel'
-import SectionSlider from './components/SectionSlider'
 import BlockInspector from './components/BlockInspector'
 import SectionSummary from './components/SectionSummary'
 import { colourValue, countMinimumMatches, createColourScales } from './data/blockColours'
@@ -18,8 +17,8 @@ import type { ViewerMode } from './viewer/Viewer'
 import { loadCsv } from './utils/loadCsv'
 
 const emptyBlocks: readonly Block[] = []
-
 export default function App() {
+  const sidebarRef = useRef<HTMLDivElement>(null)
   const [models, setModels] = useState<BlockModels | null>(null)
   const [blastBoundaries, setBlastBoundaries] = useState<BlastBoundaries>({ pre: [], post: [] })
   const [blastHoles, setBlastHoles] = useState<BlastHole[]>([])
@@ -30,13 +29,15 @@ export default function App() {
   const [minimumFilter, setMinimumFilter] = useState<{ minimum: number; blocks: readonly Block[] } | null>(null)
   const [mode, setMode] = useState<ViewerMode>('model')
   const [slicePosition, setSlicePosition] = useState<number | null>(null)
-  const [paletteCollapsed, setPaletteCollapsed] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [colourField, setColourField] = useState<ColourField>('grade_01')
   const isLoading = loadedCount < csvFiles.length
 
   const colourScales = useMemo(() => createColourScales(models?.pre ?? emptyBlocks), [models])
   const colourScale = colourScales.get(colourField)
   const minimum = minimumFilter?.minimum ?? null
+  const filtered = categorySelection !== null || minimum !== null
+  const hasCrossSection = mode !== 'model' && slicePosition !== null
   const orderedBlocks = minimumFilter?.blocks ?? models?.pre ?? emptyBlocks
 
   const visibleCount = countMinimumMatches(orderedBlocks, colourField, minimum)
@@ -66,6 +67,18 @@ export default function App() {
   // React's development profiler deeply compares changed array props.
   const getVisibleBlocks = useCallback(() => orderedBlocks, [orderedBlocks])
   const getMovementBlocks = useCallback(() => movementBlocks, [movementBlocks])
+
+  useLayoutEffect(() => {
+    if (!sidebarOpen || !hasCrossSection) return
+    const sidebar = sidebarRef.current
+    const panel = sidebar?.querySelector('#cross-section-panel')
+    if (!sidebar || !panel) return
+    const sidebarBounds = sidebar.getBoundingClientRect()
+    const panelBounds = panel.getBoundingClientRect()
+    if (panelBounds.bottom > sidebarBounds.bottom) {
+      sidebar.scrollTop += Math.min(panelBounds.top - sidebarBounds.top, panelBounds.bottom - sidebarBounds.bottom)
+    }
+  }, [hasCrossSection, sidebarOpen])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -99,9 +112,7 @@ export default function App() {
   }, [])
 
   const toggleSlicing = (): void => {
-    const enabled = mode === 'model'
-    setMode(enabled ? 'slice' : 'model')
-    setPaletteCollapsed(enabled)
+    setMode(mode === 'slice' ? 'model' : 'slice')
     setSelectedBlock(null)
   }
 
@@ -136,30 +147,26 @@ export default function App() {
   }
 
   return (
-    <main className="relative h-full w-full">
+    <main className="relative grid h-full w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)_auto] gap-3 p-6 sm:block sm:p-0">
       {!isLoading && models && colourScale && (
         <>
-          <SceneViewer models={models} blastBoundaries={blastBoundaries} blastHoles={blastHoles} colourScale={colourScale} mode={mode} slicePosition={slicePosition} getVisibleBlocks={getVisibleBlocks} getMovementBlocks={getMovementBlocks} visibleCount={visibleCount} movementCount={movementCount} categorySelection={categorySelection} selectedBlock={selectedBlock} onSelectBlock={setSelectedBlock} onSliceChange={setSlicePosition} />
-          <div className="absolute top-20 left-6 z-10 flex w-80 max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)]">
-            <ColourPalette scale={colourScale} onChange={changeColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} minimum={minimum} categoryCode={categorySelection?.value ?? null} onCategoryCodeChange={changeCategoryCode}>
-              {colourScale.kind !== 'category' && <MinimumFilterControls scale={colourScale} minimum={minimum} onChange={changeMinimum} />}
-            </ColourPalette>
-            {mode !== 'model' && slicePosition !== null && <CrossSectionPanel blocks={trackedBlocks} scale={colourScale} filtered={categorySelection !== null || minimum !== null} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
-            {mode === 'inspect' && slicePosition !== null && !selectedBlock && (
-              <SectionSlider blocks={models.pre} position={slicePosition} onChange={(position) => { setSlicePosition(position); setSelectedBlock(null) }} />
-            )}
-            {mode === 'inspect' && (selectedBlock
-              ? <BlockInspector block={selectedBlock} models={models} field={colourField} onClear={() => setSelectedBlock(null)} />
-              : <SectionSummary blocks={trackedBlocks} totalCount={sectionBlocks.length} />)}
-          </div>
-          <button
-            type="button"
-            aria-pressed={mode === 'inspect' ? undefined : mode === 'slice'}
-            onClick={mode === 'inspect' ? () => { setMode('slice'); setSelectedBlock(null) } : toggleSlicing}
-            className="absolute top-6 left-6 z-10 cursor-pointer rounded-lg border border-neutral-700 bg-neutral-900/95 px-4 py-2 text-sm text-neutral-300 shadow-lg hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:border-neutral-500 aria-pressed:bg-neutral-800 aria-pressed:text-neutral-100 sm:left-92"
+          <SceneViewer models={models} blastBoundaries={blastBoundaries} blastHoles={blastHoles} colourScale={colourScale} mode={mode} sidebarOpen={sidebarOpen} onToggleSidebar={() => setSidebarOpen((open) => !open)} filtered={filtered} slicePosition={slicePosition} getVisibleBlocks={getVisibleBlocks} getMovementBlocks={getMovementBlocks} visibleCount={visibleCount} movementCount={movementCount} categorySelection={categorySelection} selectedBlock={selectedBlock} onSelectBlock={setSelectedBlock} onSliceChange={setSlicePosition} onToggleSlicer={toggleSlicing} onInspectSection={mode === 'slice' && trackedBlocks.length > 0 ? () => setMode('inspect') : undefined} />
+          <aside
+            id="viewer-sidebar"
+            aria-label="Viewer sidebar"
+            inert={!sidebarOpen}
+            className={'z-10 col-span-full row-start-2 flex max-h-full w-full flex-col self-start overflow-hidden rounded-xl bg-neutral-900/95 text-xs text-neutral-300 shadow-lg inset-ring inset-ring-white/10 transition-[opacity,visibility] duration-200 ease-out motion-reduce:transition-none sm:absolute sm:top-6 sm:left-6 sm:max-h-[calc(100%_-_3rem)] sm:w-80 sm:pt-10 ' + (sidebarOpen ? '' : 'invisible opacity-0')}
           >
-            {mode === 'inspect' ? 'Back to slice' : 'Slice model'}
-          </button>
+            <div ref={sidebarRef} className="min-h-0 divide-y divide-white/10 overflow-y-auto sm:border-t sm:border-white/10">
+              <ColourPalette scale={colourScale} onChange={changeColourField} categoryCode={categorySelection?.value ?? null} onCategoryCodeChange={changeCategoryCode}>
+                {colourScale.kind !== 'category' && <MinimumFilterControls scale={colourScale} minimum={minimum} onChange={changeMinimum} />}
+              </ColourPalette>
+              {hasCrossSection && <CrossSectionPanel blocks={trackedBlocks} scale={colourScale} filtered={filtered} />}
+              {mode === 'inspect' && (selectedBlock
+                ? <BlockInspector block={selectedBlock} models={models} field={colourField} onClear={() => setSelectedBlock(null)} />
+                : <SectionSummary blocks={trackedBlocks} totalCount={sectionBlocks.length} />)}
+            </div>
+          </aside>
         </>
       )}
       {error ? (

@@ -19,7 +19,7 @@ export default function SectionSummary({ blocks, totalCount }: SectionSummaryPro
   }, [blocks])
 
   return (
-    <section aria-label="Section movement summary" className="shrink-0 space-y-2 rounded-xl border border-white/10 bg-neutral-900/95 p-3 text-xs text-neutral-300 shadow-lg">
+    <section aria-label="Section movement summary" className="space-y-2 p-3">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-sm font-medium text-neutral-100">Predicted movement</h2>
         <span className="text-neutral-400">{blocks.length.toLocaleString()}{blocks.length !== totalCount && ' of ' + totalCount.toLocaleString()} blocks</span>
