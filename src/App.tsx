@@ -158,7 +158,7 @@ export default function App() {
             className={'z-10 col-span-full row-start-2 flex max-h-full w-full flex-col self-start overflow-hidden rounded-xl bg-neutral-900/95 text-xs text-neutral-300 shadow-lg inset-ring inset-ring-white/10 transition-[opacity,visibility] duration-200 ease-out motion-reduce:transition-none sm:absolute sm:top-6 sm:left-6 sm:max-h-[calc(100%_-_3rem)] sm:w-80 sm:pt-10 ' + (sidebarOpen ? '' : 'invisible opacity-0')}
           >
             <div ref={sidebarRef} className="min-h-0 divide-y divide-white/10 overflow-y-auto sm:border-t sm:border-white/10">
-              <ColourPalette scale={colourScale} onChange={changeColourField} categoryCode={categorySelection?.value ?? null} onCategoryCodeChange={changeCategoryCode}>
+              <ColourPalette scale={colourScale} onChange={changeColourField} filtered={filtered} categoryCode={categorySelection?.value ?? null} onCategoryCodeChange={changeCategoryCode}>
                 {colourScale.kind !== 'category' && <MinimumFilterControls scale={colourScale} minimum={minimum} onChange={changeMinimum} />}
               </ColourPalette>
               {hasCrossSection && <CrossSectionPanel blocks={trackedBlocks} scale={colourScale} filtered={filtered} />}
