@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { colourValue } from '../data/blockColours'
 import type { Block, BlockModels, ColourField } from '../data/blockModels'
 
 interface BlockInspectorProps {
@@ -9,7 +10,7 @@ interface BlockInspectorProps {
 }
 
 export default function BlockInspector({ block, models, field, onClear }: BlockInspectorProps) {
-  const value = block ? block.attributes[field] : null
+  const value = block ? colourValue(block, field) : null
   const positions = useMemo(() => {
     if (!block) return null
     const pre = models.pre.find((candidate) => candidate.id === block.id)
@@ -26,10 +27,10 @@ export default function BlockInspector({ block, models, field, onClear }: BlockI
             <h2 className="text-sm font-medium text-neutral-100">Block {block.id}</h2>
             <button type="button" onClick={onClear} className="cursor-pointer rounded text-neutral-400 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300">Clear selection</button>
           </div>
-          <dl className="flex justify-between gap-3 font-mono">
+          {field !== 'movementDistance' && <dl className="flex justify-between gap-3 font-mono">
             <dt className="text-neutral-400">{field}</dt>
             <dd>{value === null || !Number.isFinite(value) ? '—' : value.toLocaleString(undefined, { maximumFractionDigits: 3 })}</dd>
-          </dl>
+          </dl>}
           {positions && distance !== null && (
             <>
               <div className="border-t border-white/10 pt-3">

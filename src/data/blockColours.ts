@@ -1,3 +1,4 @@
+import { categoryFields, gradeFields } from "./blockModels";
 import type { Block, ColourField } from "./blockModels";
 
 export const missingColour = 0x8c939e;
@@ -8,8 +9,11 @@ const categoryPalette = [
 
 export type ColourScale = { field: ColourField; missingCount: number } & (
   | { kind: "category"; entries: { value: number; colour: number }[] }
-  | { kind: "grade"; min: number | null; max: number | null }
+  | { kind: "grade" | "movement"; min: number | null; max: number | null }
 );
+
+export const colourValue = (block: Block, field: ColourField): number | null =>
+  field === "movementDistance" ? block.movementDistance : block.attributes[field];
 
 export function createColourScale(
   blocks: readonly Block[],
@@ -22,7 +26,7 @@ export function createColourScale(
   let missingCount = 0;
 
   for (const block of blocks) {
-    const value = block.attributes[field];
+    const value = colourValue(block, field);
     if (value === null || !Number.isFinite(value)) {
       missingCount += 1;
       continue;
@@ -50,10 +54,14 @@ export function createColourScale(
   return {
     field,
     missingCount,
-    kind: "grade",
+    kind: field === "movementDistance" ? "movement" : "grade",
     min: Number.isFinite(min) ? min : null,
     max: Number.isFinite(max) ? max : null,
   };
+}
+
+export function createColourScales(blocks: readonly Block[]): Map<ColourField, ColourScale> {
+  return new Map([...gradeFields, ...categoryFields, "movementDistance" as const].map((field) => [field, createColourScale(blocks, field)]));
 }
 
 const clamp = (val: number, min: number, max: number): number =>

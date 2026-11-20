@@ -6,6 +6,7 @@ import {
   BufferGeometry,
   Color,
   DirectionalLight,
+  InstancedBufferAttribute,
   InstancedMesh,
   Line,
   LineBasicMaterial,
@@ -27,7 +28,7 @@ import { SlicePlane } from './SlicePlane'
 import { SectionMovement } from './SectionMovement'
 import sliceVertexShader from './shaders/slice.vert.glsl?raw'
 import sliceFragmentShader from './shaders/slice.frag.glsl?raw'
-import { colourForValue } from '../data/blockColours'
+import { blockColourAttribute } from './blockColourAttribute'
 import type { ColourScale } from '../data/blockColours'
 import type { BlastBoundaries } from '../data/blastBoundary'
 import type { Block, BlockModels, CategorySelection } from '../data/blockModels'
@@ -45,6 +46,8 @@ export class Viewer {
   private mode: ViewerMode = 'model'
   private readonly clippingPlane = new Plane(new Vector3(0, 0, -1), 0)
   private readonly mesh: InstancedMesh
+  private visibleBlocks: readonly Block[] = []
+  private readonly postById = new Map<number, Block>()
   private readonly origin = new Vector3()
   private readonly renderer: WebGLRenderer
   private readonly controls: OrbitControls
@@ -66,7 +69,6 @@ export class Viewer {
   private movementProgress = 0
   private showConnections = false
   private selectedIndex: number | null = null
-  private colourScale: ColourScale | null = null
   private readonly pointerDownPosition = new Vector2()
   private readonly raycaster = new Raycaster()
   private readonly pointer = new Vector2()
@@ -89,6 +91,7 @@ export class Viewer {
     private readonly onSliceChange: (position: number) => void,
     private readonly onSelectBlock: (block: Block | null) => void,
   ) {
+    for (const block of models.post) this.postById.set(block.id, block)
     const first = models.pre[0]
     if (first) this.origin.set(first.x, first.y, first.z)
 
@@ -106,7 +109,10 @@ export class Viewer {
     this.renderer.domElement.addEventListener('pointerleave', this.clearHover)
 
     this.configureBlockHighlight()
-    this.mesh = this.createBlockMesh()
+    this.mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), this.material, models.pre.length)
+    this.setVisibleBlocks(models.pre)
+    this.mesh.computeBoundingBox()
+    this.mesh.computeBoundingSphere()
     const light = new DirectionalLight(0xffffff, 1.8)
     light.position.set(1, 3, 2)
     this.hoverHighlight.visible = false
@@ -154,19 +160,33 @@ export class Viewer {
     this.onSliceChange(initialPosition)
   }
 
-  private createBlockMesh(): InstancedMesh {
-    const mesh = new InstancedMesh(new BoxGeometry(1, 1, 1), this.material, this.models.pre.length)
+  public setVisibleBlocks(blocks: readonly Block[]): void {
+    if (blocks === this.visibleBlocks) return
+    this.visibleBlocks = blocks
+    this.mesh.count = blocks.length
     const matrix = new Matrix4()
-    this.models.pre.forEach((block, index) => {
+    blocks.forEach((block, index) => {
       matrix.makeScale(block.width, block.height, block.depth)
       // Mining Z is elevation; Three.js uses Y as the vertical axis.
       matrix.setPosition(block.x - this.origin.x, block.z - this.origin.z, this.origin.y - block.y)
-      mesh.setMatrixAt(index, matrix)
+      this.mesh.setMatrixAt(index, matrix)
     })
-    mesh.instanceMatrix.needsUpdate = true
-    mesh.computeBoundingBox()
-    mesh.computeBoundingSphere()
-    return mesh
+    this.mesh.instanceMatrix.needsUpdate = true
+    this.render()
+  }
+
+  public setBlockCounts(visibleCount: number, movementCount: number): void {
+    this.mesh.count = visibleCount
+    if (this.movement) {
+      const previousCount = this.movement.count
+      this.movement.setCount(movementCount)
+      if (movementCount > previousCount) this.movement.setProgress(this.movementProgress, previousCount)
+    }
+    for (const boundary of this.blastBoundaries) {
+      boundary.visible = this.movement !== null || this.mode === 'inspect' || visibleCount < this.models.pre.length
+    }
+    this.clearHover()
+    this.render()
   }
 
   public setBlastBoundaries(boundaries: BlastBoundaries): void {
@@ -181,14 +201,17 @@ export class Viewer {
   }
 
   public setColourScale(scale: ColourScale, categorySelection: CategorySelection | null = null): void {
-    this.colourScale = scale
-    const colour = new Color()
-    this.models.pre.forEach((block, index) => {
-      colour.setHex(colourForValue(scale, block.attributes[scale.field]))
-      if (categorySelection && block.attributes[categorySelection.field] !== categorySelection.value) colour.multiplyScalar(0.2)
-      this.mesh.setColorAt(index, colour)
-    })
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true
+    const colours = blockColourAttribute(this.visibleBlocks, scale)
+    this.mesh.instanceColor = categorySelection ? new InstancedBufferAttribute(colours.array.slice(), 3) : colours
+    if (categorySelection) {
+      const colour = new Color()
+      this.visibleBlocks.forEach((block, index) => {
+        if (block.attributes[categorySelection.field] !== categorySelection.value) {
+          colour.fromBufferAttribute(colours, index).multiplyScalar(0.2)
+          this.mesh.instanceColor!.setXYZ(index, colour.r, colour.g, colour.b)
+        }
+      })
+    }
     this.movement?.setColourScale(scale)
     this.render()
   }
@@ -246,17 +269,8 @@ export class Viewer {
     this.selectedIndex = null
     this.movementLine.visible = false
     if (blocks.length) {
-      const ids = new Set(blocks.map((block) => block.id))
-      const pre: Block[] = []
-      const post: Block[] = []
-      this.models.pre.forEach((block, index) => {
-        if (ids.has(block.id)) {
-          pre.push(block)
-          post.push(this.models.post[index])
-        }
-      })
-      this.movement = new SectionMovement(pre, post, this.origin)
-      if (this.colourScale) this.movement.setColourScale(this.colourScale)
+      const post = blocks.map((block) => this.postById.get(block.id)!)
+      this.movement = new SectionMovement(blocks, post, this.origin)
       this.scene.add(this.movement)
     }
     this.setMovementProgress(!blocks.length && this.mode !== 'inspect' ? 0 : this.movementProgress)
@@ -267,7 +281,7 @@ export class Viewer {
     this.material.color.setScalar(focused ? 0.1 : 1)
     this.material.needsUpdate = true
     for (const boundary of this.blastBoundaries) {
-      boundary.visible = focused
+      boundary.visible = focused || this.mesh.count < this.models.pre.length
       boundary.material.clippingPlanes = this.mode === 'inspect' ? [this.clippingPlane] : []
     }
     this.render()
@@ -504,7 +518,7 @@ export class Viewer {
   }
 
   public frameSection(): void {
-    if (this.movement) this.frameBlocks([...this.movement.pre, ...this.movement.post])
+    if (this.movement) this.frameBlocks([...this.movement.pre.slice(0, this.movement.count), ...this.movement.post.slice(0, this.movement.count)])
   }
 
   private readonly resize = (): void => {

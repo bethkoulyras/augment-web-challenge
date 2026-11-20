@@ -1,10 +1,13 @@
 import { categoryFields, gradeFields } from "../data/blockModels";
-import type { ColourField } from "../data/blockModels";
+import type { ReactNode } from "react";
+import type { ColourField, GradeFilter } from "../data/blockModels";
 import { colourCss, gradientStops } from "../data/blockColours";
 import type { ColourScale } from "../data/blockColours";
 
 interface ColourPaletteProps {
   scale: ColourScale;
+  gradeFilter: GradeFilter | null;
+  children?: ReactNode;
   collapsed: boolean;
   onToggle: () => void;
   onChange: (field: ColourField) => void;
@@ -13,9 +16,9 @@ interface ColourPaletteProps {
 const format = (value: number): string =>
   value.toLocaleString(undefined, { maximumFractionDigits: 3 });
 
-export default function ColourPalette({ scale, onChange, collapsed, onToggle }: ColourPaletteProps) {
+export default function ColourPalette({ scale, onChange, collapsed, onToggle, gradeFilter, children }: ColourPaletteProps) {
   const categorical = scale.kind === "category";
-  const fields = categorical ? categoryFields : gradeFields;
+  const fields = categorical ? categoryFields : scale.kind === "grade" ? gradeFields : [];
 
   return (
     <section
@@ -30,7 +33,7 @@ export default function ColourPalette({ scale, onChange, collapsed, onToggle }: 
         onClick={onToggle}
         className="flex w-full cursor-pointer items-center justify-between gap-3 rounded text-left focus-visible:outline-2 focus-visible:outline-neutral-300"
       >
-        <span>Colour by <span className="ml-2 font-mono text-neutral-200">{scale.field}</span></span>
+        <span>Colour by <span className="ml-2 font-mono text-neutral-200">{scale.kind === "movement" ? "Movement (m)" : scale.field}</span></span>
         <span aria-hidden="true">{collapsed ? "▾" : "▴"}</span>
       </button>
 
@@ -38,53 +41,53 @@ export default function ColourPalette({ scale, onChange, collapsed, onToggle }: 
         <div
           role="group"
           aria-label="Colour field type"
-          className="grid grid-cols-2 gap-1 rounded-lg bg-neutral-950 p-1"
+          className="grid grid-cols-3 gap-1 rounded-lg bg-neutral-950 p-1"
         >
-          <button
-            type="button"
-            aria-pressed={!categorical}
-            onClick={() => {
-              if (categorical) onChange(gradeFields[0]);
-            }}
-            className="cursor-pointer rounded-md px-3 py-2 text-neutral-500 transition-colors hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:bg-neutral-800 aria-pressed:text-white"
-          >
-            Grades
-          </button>
-          <button
-            type="button"
-            aria-pressed={categorical}
-            onClick={() => {
-              if (!categorical) onChange(categoryFields[0]);
-            }}
-            className="cursor-pointer rounded-md px-3 py-2 text-neutral-500 transition-colors hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:bg-neutral-800 aria-pressed:text-white"
-          >
-            Categories
-          </button>
-        </div>
-
-        <div
-          role="group"
-          aria-label={categorical ? "Category fields" : "Grade fields"}
-          className={
-            "grid gap-1.5 " + (categorical ? "grid-cols-3" : "grid-cols-6")
-          }
-        >
-          {fields.map((field) => (
+          {([
+            ["grade", "Grades", gradeFilter?.field ?? gradeFields[0]],
+            ["category", "Categories", categoryFields[0]],
+            ["movement", "Movement", "movementDistance"],
+          ] as const).map(([kind, label, field]) => (
             <button
-              key={field}
+              key={kind}
               type="button"
-              title={field}
-              aria-label={"Colour by " + field}
-              aria-pressed={scale.field === field}
-              onClick={() => onChange(field)}
-              className="cursor-pointer rounded-md border border-neutral-700/70 bg-neutral-800/40 py-2 font-mono text-neutral-400 transition-colors hover:border-neutral-500 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:border-neutral-500 aria-pressed:bg-neutral-700 aria-pressed:text-neutral-100"
+              aria-pressed={scale.kind === kind}
+              onClick={() => { if (scale.kind !== kind) onChange(field); }}
+              className="cursor-pointer rounded-md px-2 py-2 text-neutral-500 transition-colors hover:text-neutral-200 focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:bg-neutral-800 aria-pressed:text-white"
             >
-              {categorical ? field : field.slice(6)}
+              {label}
             </button>
           ))}
         </div>
 
+        {fields.length > 0 && (
+          <div
+            role="group"
+            aria-label={categorical ? "Category fields" : "Grade fields"}
+            className={
+              "grid gap-1.5 " + (categorical ? "grid-cols-3" : "grid-cols-6")
+            }
+          >
+            {fields.map((field) => (
+              <button
+                key={field}
+                type="button"
+                title={field}
+                aria-label={"Colour by " + field}
+                aria-pressed={scale.field === field}
+                onClick={() => onChange(field)}
+                className="cursor-pointer rounded-md border border-neutral-700/70 bg-neutral-800/40 py-2 font-mono text-neutral-400 transition-colors hover:border-neutral-500 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 aria-pressed:border-neutral-500 aria-pressed:bg-neutral-700 aria-pressed:text-neutral-100"
+              >
+                {categorical ? field : field.slice(6)}
+              </button>
+            ))}
+          </div>
+        )}
+        {scale.kind === "grade" && children}
       </div>
+      {(collapsed || scale.kind !== "grade") && gradeFilter && (
+        <p className="text-neutral-400">Filter: {gradeFilter.field} ≥ {format(gradeFilter.minimum)}</p>
+      )}
 
       <div
         aria-label="Colour legend"
@@ -119,10 +122,10 @@ export default function ColourPalette({ scale, onChange, collapsed, onToggle }: 
             />
             <div className="flex justify-between gap-3 tabular-nums">
               <span>
-                <span className="mr-1 text-neutral-500">Low</span>{" "}
+                <span className="text-neutral-500">{scale.kind === "movement" ? format(scale.min) + " m" : "Low"}</span>
               </span>
               <span>
-                <span className="mr-1 text-neutral-500">High</span>{" "}
+                <span className="text-neutral-500">{scale.kind === "movement" ? format(scale.max) + " m" : "High"}</span>
               </span>
             </div>
           </div>

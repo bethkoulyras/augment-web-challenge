@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import MovementSlider from './MovementSlider'
 import { Viewer } from '../viewer/Viewer'
 import type { ViewerMode } from '../viewer/Viewer'
@@ -14,17 +14,21 @@ interface SceneViewerProps {
   slicePosition: number | null
   selectedBlock: Block | null
   onSelectBlock: (block: Block | null) => void
-  sectionBlocks: readonly Block[]
-  categoryBlocks: readonly Block[] | null
+  getMovementBlocks: () => readonly Block[] | null
+  getVisibleBlocks: () => readonly Block[]
+  visibleCount: number
+  movementCount: number
   categorySelection: CategorySelection | null
   onSliceChange: (position: number) => void
 }
 
-export default function SceneViewer({ models, blastBoundaries, colourScale, mode, slicePosition, sectionBlocks, categoryBlocks, categorySelection, selectedBlock, onSelectBlock, onSliceChange }: SceneViewerProps) {
+export default function SceneViewer({ models, blastBoundaries, colourScale, mode, slicePosition, getMovementBlocks, getVisibleBlocks, visibleCount, movementCount, categorySelection, selectedBlock, onSelectBlock, onSliceChange }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
   const [showConnections, setShowConnections] = useState(false)
-  const movementBlocks = mode === 'inspect' ? sectionBlocks : mode === 'model' ? categoryBlocks : null
+  const visibleBlocks = getVisibleBlocks()
+  const movementBlocks = getMovementBlocks()
+  const firstMovingBlock = useMemo(() => movementBlocks?.findIndex((block) => block.movementDistance > 0) ?? -1, [movementBlocks])
 
   useEffect(() => {
     const container = containerRef.current
@@ -40,7 +44,7 @@ export default function SceneViewer({ models, blastBoundaries, colourScale, mode
 
   useEffect(() => viewerRef.current?.setBlastBoundaries(blastBoundaries), [models, blastBoundaries])
 
-  useEffect(() => viewerRef.current?.setColourScale(colourScale, mode === 'slice' ? categorySelection : null), [models, colourScale, mode, categorySelection])
+  useEffect(() => viewerRef.current?.setVisibleBlocks(visibleBlocks), [models, visibleBlocks])
 
   useEffect(() => {
     const sidebarWidth = 320
@@ -55,6 +59,10 @@ export default function SceneViewer({ models, blastBoundaries, colourScale, mode
   useEffect(() => {
     viewerRef.current?.setSection(movementBlocks ?? [])
   }, [models, mode, movementBlocks])
+
+  useEffect(() => viewerRef.current?.setColourScale(colourScale, mode === 'slice' ? categorySelection : null), [models, colourScale, mode, categorySelection, visibleBlocks, movementBlocks])
+
+  useEffect(() => viewerRef.current?.setBlockCounts(visibleCount, movementCount), [models, movementBlocks, visibleBlocks, visibleCount, movementCount])
 
   useEffect(() => {
     viewerRef.current?.setSelectedBlock(mode === 'inspect' ? selectedBlock : null)
@@ -78,8 +86,9 @@ export default function SceneViewer({ models, blastBoundaries, colourScale, mode
       />
       {movementBlocks !== null && (
         <MovementSlider
-          sectionBlocks={movementBlocks}
-          disabled={!movementBlocks.some((block) => block.movementDistance > 0)}
+          getMovementBlocks={getMovementBlocks}
+          movementCount={movementCount}
+          disabled={firstMovingBlock < 0 || firstMovingBlock >= movementCount}
           onChange={(progress) => viewerRef.current?.setMovementProgress(progress)}
           showConnections={showConnections}
           onConnectionsChange={mode === 'inspect' && !selectedBlock ? setShowConnections : undefined}

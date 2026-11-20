@@ -1,66 +1,84 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SceneViewer from './components/SceneViewer'
 import ColourPalette from './components/ColourPalette'
 import CategoryControls from './components/CategoryControls'
+import GradeFilterControls from './components/GradeFilterControls'
 import CrossSectionPanel from './components/CrossSectionPanel'
 import SectionSlider from './components/SectionSlider'
 import BlockInspector from './components/BlockInspector'
 import SectionSummary from './components/SectionSummary'
-import { createColourScale } from './data/blockColours'
+import { createColourScales } from './data/blockColours'
 import { csvFiles } from './data/csvFiles'
-import { createBlockModels } from './data/blockModels'
+import { createBlockModels, countGradeMatches } from './data/blockModels'
 import { createBlastBoundarySegments } from './data/blastBoundary'
-import type { Block, CategorySelection, ColourField } from './data/blockModels'
+import type { BlastBoundaries } from './data/blastBoundary'
+import type { Block, BlockModels, CategorySelection, ColourField, GradeField, GradeFilter } from './data/blockModels'
 import type { ViewerMode } from './viewer/Viewer'
 import { loadCsv } from './utils/loadCsv'
-import type { CsvRow } from './utils/loadCsv'
+
+const emptyBlocks: readonly Block[] = []
 
 export default function App() {
-  const [data, setData] = useState<Record<string, CsvRow[]>>({})
+  const [models, setModels] = useState<BlockModels | null>(null)
+  const [blastBoundaries, setBlastBoundaries] = useState<BlastBoundaries>({ pre: [], post: [] })
+  const [loadedCount, setLoadedCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null)
   const [categorySelection, setCategorySelection] = useState<CategorySelection | null>(null)
+  const [filteredGrade, setFilteredGrade] = useState<{ filter: GradeFilter; blocks: readonly Block[] } | null>(null)
   const [mode, setMode] = useState<ViewerMode>('model')
   const [slicePosition, setSlicePosition] = useState<number | null>(null)
   const [paletteCollapsed, setPaletteCollapsed] = useState(false)
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false)
   const [colourField, setColourField] = useState<ColourField>('grade_01')
-  const isLoading = csvFiles.some((file) => !data[file])
-  const preBoundaryRows = data['1_pre_string.csv']
-  const postBoundaryRows = data['1_pst_string.csv']
-  const blastBoundaries = useMemo(() => ({
-    pre: createBlastBoundarySegments(preBoundaryRows ?? []),
-    post: createBlastBoundarySegments(postBoundaryRows ?? []),
-  }), [preBoundaryRows, postBoundaryRows])
-  const mbmRows = data['1_mbm.csv']
-  const models = useMemo(() => mbmRows ? createBlockModels(mbmRows) : null, [mbmRows])
+  const isLoading = loadedCount < csvFiles.length
 
-  const colourScale = useMemo(() => models ? createColourScale(models.pre, colourField) : null, [models, colourField])
+  const colourScales = useMemo(() => createColourScales(models?.pre ?? emptyBlocks), [models])
+  const colourScale = colourScales.get(colourField)
+  const gradeFilter = filteredGrade?.filter ?? null
+  const orderedBlocks = filteredGrade?.blocks ?? models?.pre ?? emptyBlocks
 
-  const categoryBlocks = useMemo(() => {
-    if (!models || !categorySelection) return null
-    return models.pre.filter((block) => block.attributes[categorySelection.field] === categorySelection.value)
-  }, [models, categorySelection])
+  const visibleCount = countGradeMatches(orderedBlocks, gradeFilter)
+
+  const categoryBlocks = useMemo(() => categorySelection
+    ? orderedBlocks.filter((block) => block.attributes[categorySelection.field] === categorySelection.value)
+    : null, [orderedBlocks, categorySelection])
+
+  const modelBlocks = categoryBlocks ?? filteredGrade?.blocks ?? null
+  const modelCount = categoryBlocks ? countGradeMatches(categoryBlocks, gradeFilter) : visibleCount
 
   const sectionBlocks = useMemo(() => {
-    if (!models || slicePosition === null) return []
-    return models.pre.filter((block) => Math.abs(block.y - slicePosition) <= block.depth / 2 + 0.001)
-  }, [models, slicePosition])
+    if (mode === 'model' || slicePosition === null) return emptyBlocks
+    return orderedBlocks.filter((block) => Math.abs(block.y - slicePosition) <= block.depth / 2 + 0.001)
+  }, [mode, orderedBlocks, slicePosition])
 
-  const trackedBlocks = useMemo(() => {
-    if (!categorySelection) return sectionBlocks
-    return sectionBlocks.filter((block) => block.attributes[categorySelection.field] === categorySelection.value)
-  }, [sectionBlocks, categorySelection])
+  const sectionCohort = useMemo(() => categorySelection
+    ? sectionBlocks.filter((block) => block.attributes[categorySelection.field] === categorySelection.value)
+    : sectionBlocks, [sectionBlocks, categorySelection])
+
+  const trackedBlocks = useMemo(() => gradeFilter
+    ? sectionCohort.slice(0, countGradeMatches(sectionCohort, gradeFilter))
+    : sectionCohort, [sectionCohort, gradeFilter])
+
+  const movementBlocks = mode === 'inspect' ? sectionCohort : mode === 'model' ? modelBlocks : null
+  const movementCount = mode === 'inspect' ? trackedBlocks.length : movementBlocks ? modelCount : 0
+  // React's development profiler deeply compares changed array props.
+  const getVisibleBlocks = useCallback(() => orderedBlocks, [orderedBlocks])
+  const getMovementBlocks = useCallback(() => movementBlocks, [movementBlocks])
 
   useEffect(() => {
     const controller = new AbortController()
+    setLoadedCount(0)
+    setSelectedBlock(null)
 
     const loadFiles = async (): Promise<void> => {
       for (const file of csvFiles) {
         const rows = await loadCsv('/' + file, controller.signal)
         if (controller.signal.aborted) return
-        console.log(file + ': loaded')
-        setData((current) => ({ ...current, [file]: rows }))
+        if (file === '1_mbm.csv') setModels(createBlockModels(rows))
+        if (file === '1_pre_string.csv') setBlastBoundaries((current) => ({ ...current, pre: createBlastBoundarySegments(rows) }))
+        if (file === '1_pst_string.csv') setBlastBoundaries((current) => ({ ...current, post: createBlastBoundarySegments(rows) }))
+        setLoadedCount((count) => count + 1)
       }
     }
 
@@ -81,15 +99,39 @@ export default function App() {
     setSelectedBlock(null)
   }
 
+  const changeGradeFilter = (filter: GradeFilter | null): void => {
+    if (filter && models) {
+      const grade = (block: Block): number => {
+        const value = block.attributes[filter.field]
+        return value !== null && Number.isFinite(value) ? value : -Infinity
+      }
+      // The renderer hides the suffix by updating its instance count.
+      const blocks = filteredGrade?.filter.field === filter.field
+        ? filteredGrade.blocks
+        : [...models.pre].sort((a, b) => grade(b) - grade(a))
+      setFilteredGrade({ filter, blocks })
+    } else {
+      setFilteredGrade(null)
+    }
+    setSelectedBlock(null)
+  }
+
   return (
     <main className="relative h-full w-full">
       {!isLoading && models && colourScale && (
         <>
-          <SceneViewer models={models} blastBoundaries={blastBoundaries} colourScale={colourScale} mode={mode} slicePosition={slicePosition} sectionBlocks={trackedBlocks} categoryBlocks={categoryBlocks} categorySelection={categorySelection} selectedBlock={selectedBlock} onSelectBlock={setSelectedBlock} onSliceChange={setSlicePosition} />
+          <SceneViewer models={models} blastBoundaries={blastBoundaries} colourScale={colourScale} mode={mode} slicePosition={slicePosition} getVisibleBlocks={getVisibleBlocks} getMovementBlocks={getMovementBlocks} visibleCount={visibleCount} movementCount={movementCount} categorySelection={categorySelection} selectedBlock={selectedBlock} onSelectBlock={setSelectedBlock} onSliceChange={setSlicePosition} />
           <div className="absolute top-20 left-6 z-10 flex w-80 max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)]">
-            <ColourPalette scale={colourScale} onChange={setColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} />
-            <CategoryControls blocks={models.pre} selection={categorySelection} collapsed={categoriesCollapsed} onToggle={() => setCategoriesCollapsed((current) => !current)} onChange={(selection) => { setCategorySelection(selection); setSelectedBlock(null) }} />
-            {mode !== 'model' && slicePosition !== null && <CrossSectionPanel blocks={trackedBlocks} scale={colourScale} filtered={categorySelection !== null} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
+            <ColourPalette scale={colourScale} onChange={(field) => {
+              setColourField(field)
+              if (gradeFilter && field.startsWith('grade_') && field !== gradeFilter.field) {
+                changeGradeFilter(null)
+              }
+            }} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} gradeFilter={gradeFilter}>
+              {colourScale.kind === 'grade' && <GradeFilterControls field={colourField as GradeField} scale={colourScale} filter={gradeFilter} onChange={changeGradeFilter} />}
+            </ColourPalette>
+            <CategoryControls colourScales={colourScales} selection={categorySelection} collapsed={categoriesCollapsed} onToggle={() => setCategoriesCollapsed((current) => !current)} onChange={(selection) => { setCategorySelection(selection); setSelectedBlock(null) }} />
+            {mode !== 'model' && slicePosition !== null && <CrossSectionPanel blocks={trackedBlocks} scale={colourScale} filtered={categorySelection !== null || gradeFilter !== null} onInspect={mode === 'slice' ? () => setMode('inspect') : undefined} />}
             {mode === 'inspect' && slicePosition !== null && !selectedBlock && (
               <SectionSlider blocks={models.pre} position={slicePosition} onChange={(position) => { setSlicePosition(position); setSelectedBlock(null) }} />
             )}

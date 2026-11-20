@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { colourCss, colourForValue } from '../data/blockColours'
+import { colourCss, colourForValue, colourValue } from '../data/blockColours'
 import type { ColourScale } from '../data/blockColours'
 import type { Block } from '../data/blockModels'
 
@@ -53,7 +53,7 @@ export default function CrossSectionCanvas({ blocks, scale }: CrossSectionCanvas
         const screenY = canvasBottom - (block.z + block.height / 2 - minZ) * pixelsPerUnit
         const blockWidth = block.width * pixelsPerUnit
         const blockHeight = block.height * pixelsPerUnit
-        context.fillStyle = colourCss(colourForValue(scale, block.attributes[scale.field]))
+        context.fillStyle = colourCss(colourForValue(scale, colourValue(block, scale.field)))
         context.fillRect(screenX, screenY, blockWidth, blockHeight)
         if (blockWidth > 1.5 && blockHeight > 1.5) {
           context.strokeRect(screenX, screenY, blockWidth, blockHeight)

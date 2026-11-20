@@ -5,7 +5,9 @@ export const gradeFields = [
   'grade_07', 'grade_08', 'grade_09', 'grade_10', 'grade_11',
 ] as const
 export const categoryFields = ['cat_1', 'cat_2', 'cat_3'] as const
-export type ColourField = typeof gradeFields[number] | typeof categoryFields[number]
+export type GradeField = typeof gradeFields[number]
+export type AttributeField = GradeField | typeof categoryFields[number]
+export type ColourField = AttributeField | 'movementDistance'
 const attributeFields = [...gradeFields, ...categoryFields]
 
 export interface Block {
@@ -17,7 +19,7 @@ export interface Block {
   depth: number
   height: number
   movementDistance: number
-  attributes: Record<ColourField, number | null>
+  attributes: Record<AttributeField, number | null>
 }
 
 export interface BlockModels {
@@ -30,6 +32,30 @@ export interface CategorySelection {
   value: number
 }
 
+export interface GradeFilter {
+  field: GradeField
+  minimum: number
+}
+
+export function matchesGradeFilter(block: Block, filter: GradeFilter | null): boolean {
+  if (!filter) return true
+  const value = block.attributes[filter.field]
+  return value !== null && Number.isFinite(value) && value >= filter.minimum
+}
+
+// Blocks are ordered from highest grade to lowest.
+export function countGradeMatches(blocks: readonly Block[], filter: GradeFilter | null): number {
+  if (!filter) return blocks.length
+  let low = 0
+  let high = blocks.length
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2)
+    if (matchesGradeFilter(blocks[middle], filter)) low = middle + 1
+    else high = middle
+  }
+  return low
+}
+
 export type ModelView = keyof BlockModels
 
 export function createBlockModels(rows: CsvRow[]): BlockModels {
@@ -38,7 +64,7 @@ export function createBlockModels(rows: CsvRow[]): BlockModels {
   for (const row of rows) {
     if (!row.IJK || Number(row.PREN) !== 1) continue
 
-    const attributes = Object.fromEntries(attributeFields.map((field) => [field, row[field]?.trim() ? Number(row[field]) : null])) as Record<ColourField, number | null>
+    const attributes = Object.fromEntries(attributeFields.map((field) => [field, row[field]?.trim() ? Number(row[field]) : null])) as Record<AttributeField, number | null>
     const block: Block = {
       id: Number(row.IJK),
       x: Number(row.XC),

@@ -2,14 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Block } from '../data/blockModels'
 
 interface MovementSliderProps {
-  sectionBlocks: readonly Block[]
+  getMovementBlocks: () => readonly Block[] | null
+  movementCount: number
   disabled: boolean
   onChange: (progress: number) => void
   showConnections: boolean
   onConnectionsChange?: (show: boolean) => void
 }
 
-export default function MovementSlider({ sectionBlocks, disabled, onChange, showConnections, onConnectionsChange }: MovementSliderProps) {
+export default function MovementSlider({ getMovementBlocks, movementCount, disabled, onChange, showConnections, onConnectionsChange }: MovementSliderProps) {
   const [progress, setProgress] = useState(0)
   const [playing, setPlaying] = useState(false)
   const progressRef = useRef(0)
@@ -31,7 +32,7 @@ export default function MovementSlider({ sectionBlocks, disabled, onChange, show
     setPlaying(false)
   }, [])
 
-  useEffect(pause, [pause, sectionBlocks])
+  useEffect(pause, [pause, getMovementBlocks, movementCount])
 
   const togglePlayback = (): void => {
     if (frameRef.current !== null) return pause()
