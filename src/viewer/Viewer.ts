@@ -307,17 +307,15 @@ export class Viewer {
     this.render()
   }
 
-  public setMode(mode: ViewerMode): void {
+  private setMode(mode: ViewerMode): void {
+    if (mode === this.mode) return
     const inspecting = mode === 'inspect'
-    if (mode !== this.mode) this.setMovementProgress(0)
+    this.movementProgress = 0
     this.slicer?.setEnabled(mode === 'slice')
     this.sliceActive.value = mode === 'slice'
     this.mode = mode
-    if (!inspecting) this.setSection([])
-    this.material.color.setScalar(inspecting ? 0.2 : 1)
     this.material.clippingPlanes = inspecting ? [this.clippingPlane] : []
     for (const surface of this.surveySurfaces) surface.material.clippingPlanes = this.material.clippingPlanes
-    this.updateSurveySurfaces()
     this.blastHoleLines.material.clippingPlanes = this.material.clippingPlanes
     this.blastHoleCollars.material.clippingPlanes = this.material.clippingPlanes
     this.resize()
@@ -354,7 +352,8 @@ export class Viewer {
     this.render()
   }
 
-  public setSection(blocks: readonly Block[]): void {
+  public setMovementBlocks(mode: ViewerMode, blocks: readonly Block[]): void {
+    this.setMode(mode)
     this.cameraMove = null
     this.clearHover()
     this.movement?.removeFromParent()
@@ -639,6 +638,7 @@ export class Viewer {
 
   public setSidebarOpen(open: boolean): void {
     const to = open ? 1 : 0
+    if (this.sidebarMove?.to === to) return
     if (this.sidebarProgress === to) {
       this.sidebarMove = null
       return

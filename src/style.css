@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+@utility outlined-button {
+  @apply inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-sm border border-neutral-700 bg-transparent px-2.5 py-1.5 font-medium;
+  @apply hover:bg-white/5 hover:text-white focus-visible:outline-2 focus-visible:outline-neutral-300 disabled:cursor-default disabled:opacity-40;
+  @apply aria-pressed:border-neutral-400 aria-pressed:bg-neutral-700 aria-pressed:text-white;
+}
+
 :root {
   --viewer-background: #141414;
   font-family: system-ui, sans-serif;
