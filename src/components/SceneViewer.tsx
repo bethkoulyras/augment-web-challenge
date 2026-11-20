@@ -3,12 +3,14 @@ import MovementSlider from './MovementSlider'
 import { Viewer } from '../viewer/Viewer'
 import type { ViewerMode } from '../viewer/Viewer'
 import type { BlastBoundaries } from '../data/blastBoundary'
+import type { BlastHole } from '../data/blastHoles'
 import type { ColourScale } from '../data/blockColours'
 import type { Block, BlockModels, CategorySelection } from '../data/blockModels'
 
 interface SceneViewerProps {
   models: BlockModels
   blastBoundaries: BlastBoundaries
+  blastHoles: readonly BlastHole[]
   colourScale: ColourScale
   mode: ViewerMode
   slicePosition: number | null
@@ -22,10 +24,11 @@ interface SceneViewerProps {
   onSliceChange: (position: number) => void
 }
 
-export default function SceneViewer({ models, blastBoundaries, colourScale, mode, slicePosition, getMovementBlocks, getVisibleBlocks, visibleCount, movementCount, categorySelection, selectedBlock, onSelectBlock, onSliceChange }: SceneViewerProps) {
+export default function SceneViewer({ models, blastBoundaries, blastHoles, colourScale, mode, slicePosition, getMovementBlocks, getVisibleBlocks, visibleCount, movementCount, categorySelection, selectedBlock, onSelectBlock, onSliceChange }: SceneViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const viewerRef = useRef<Viewer | null>(null)
   const [showConnections, setShowConnections] = useState(false)
+  const [showBlastHoles, setShowBlastHoles] = useState(false)
   const visibleBlocks = getVisibleBlocks()
   const movementBlocks = getMovementBlocks()
   const firstMovingBlock = useMemo(() => movementBlocks?.findIndex((block) => block.movementDistance > 0) ?? -1, [movementBlocks])
@@ -43,6 +46,10 @@ export default function SceneViewer({ models, blastBoundaries, colourScale, mode
   }, [models, onSliceChange, onSelectBlock])
 
   useEffect(() => viewerRef.current?.setBlastBoundaries(blastBoundaries), [models, blastBoundaries])
+
+  useEffect(() => viewerRef.current?.setBlastHoles(blastHoles), [models, blastHoles])
+
+  useEffect(() => viewerRef.current?.setBlastHolesVisible(showBlastHoles), [models, showBlastHoles])
 
   useEffect(() => viewerRef.current?.setVisibleBlocks(visibleBlocks), [models, visibleBlocks])
 
@@ -84,16 +91,17 @@ export default function SceneViewer({ models, blastBoundaries, colourScale, mode
         role="group"
         aria-label={mode === 'inspect' ? '3D section inspection' : '3D block model'}
       />
-      {movementBlocks !== null && (
-        <MovementSlider
-          getMovementBlocks={getMovementBlocks}
-          movementCount={movementCount}
-          disabled={firstMovingBlock < 0 || firstMovingBlock >= movementCount}
-          onChange={(progress) => viewerRef.current?.setMovementProgress(progress)}
-          showConnections={showConnections}
-          onConnectionsChange={mode === 'inspect' && !selectedBlock ? setShowConnections : undefined}
-        />
-      )}
+      <MovementSlider
+        key={mode}
+        getMovementBlocks={getMovementBlocks}
+        movementCount={movementCount}
+        disabled={firstMovingBlock < 0 || firstMovingBlock >= movementCount}
+        onChange={(progress) => viewerRef.current?.setMovementProgress(progress)}
+        showConnections={showConnections}
+        onConnectionsChange={mode === 'inspect' && !selectedBlock ? setShowConnections : undefined}
+        showBlastHoles={showBlastHoles}
+        onBlastHolesChange={blastHoles.length ? setShowBlastHoles : undefined}
+      />
       {mode === 'inspect' && (
         <button
           type="button"

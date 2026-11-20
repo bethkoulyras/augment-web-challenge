@@ -16,6 +16,8 @@ import {
   MeshLambertMaterial,
   PerspectiveCamera,
   Plane,
+  Points,
+  PointsMaterial,
   Raycaster,
   Scene,
   Uniform,
@@ -31,6 +33,7 @@ import sliceFragmentShader from './shaders/slice.frag.glsl?raw'
 import { blockColourAttribute } from './blockColourAttribute'
 import type { ColourScale } from '../data/blockColours'
 import type { BlastBoundaries } from '../data/blastBoundary'
+import type { BlastHole } from '../data/blastHoles'
 import type { Block, BlockModels, CategorySelection } from '../data/blockModels'
 
 export type ViewerMode = 'model' | 'slice' | 'inspect'
@@ -56,6 +59,14 @@ export class Viewer {
     new BufferGeometry(),
     new LineBasicMaterial({ color: 0xa3a3a3, transparent: true, opacity: 0.4 * opacity, depthTest: false, depthWrite: false }),
   ))
+  private readonly blastHoleLines = new LineSegments(
+    new BufferGeometry(),
+    new LineBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.65, depthTest: false, depthWrite: false }),
+  )
+  private readonly blastHoleCollars = new Points(
+    new BufferGeometry(),
+    new PointsMaterial({ color: 0xfbbf24, size: 4, sizeAttenuation: false, transparent: true, depthTest: false, depthWrite: false }),
+  )
   private readonly hoverHighlight = new Box3Helper(new Box3(), 0xffffff)
   private readonly selectionHighlight = new Box3Helper(new Box3(), 0xffffff)
   private readonly originalPositionHighlight = new Box3Helper(new Box3(), 0xa3a3a3)
@@ -145,6 +156,11 @@ export class Viewer {
       boundary.renderOrder = 2
     }
     this.scene.add(...this.blastBoundaries)
+    this.blastHoleLines.visible = false
+    this.blastHoleLines.renderOrder = 4
+    this.blastHoleCollars.renderOrder = 5
+    this.blastHoleLines.add(this.blastHoleCollars)
+    this.scene.add(this.blastHoleLines)
 
     this.resizeObserver = new ResizeObserver(this.resize)
     this.resizeObserver.observe(container)
@@ -200,6 +216,33 @@ export class Viewer {
     this.render()
   }
 
+  public setBlastHoles(holes: readonly BlastHole[]): void {
+    const collars: Vector3[] = []
+    const segments: Vector3[] = []
+    for (const hole of holes) {
+      const angle = MathUtils.degToRad(hole.angle)
+      const bearing = MathUtils.degToRad(hole.bearing)
+      const horizontal = hole.depth * Math.cos(angle)
+      const collar = new Vector3(hole.x - this.origin.x, hole.z - this.origin.z, this.origin.y - hole.y)
+      collars.push(collar)
+      segments.push(collar, collar.clone().add(new Vector3(
+        horizontal * Math.sin(bearing),
+        hole.depth * Math.sin(angle),
+        -horizontal * Math.cos(bearing),
+      )))
+    }
+    this.blastHoleLines.geometry.dispose()
+    this.blastHoleCollars.geometry.dispose()
+    this.blastHoleLines.geometry = new BufferGeometry().setFromPoints(segments)
+    this.blastHoleCollars.geometry = new BufferGeometry().setFromPoints(collars)
+    this.render()
+  }
+
+  public setBlastHolesVisible(visible: boolean): void {
+    this.blastHoleLines.visible = visible
+    this.render()
+  }
+
   public setColourScale(scale: ColourScale, categorySelection: CategorySelection | null = null): void {
     const colours = blockColourAttribute(this.visibleBlocks, scale)
     this.mesh.instanceColor = categorySelection ? new InstancedBufferAttribute(colours.array.slice(), 3) : colours
@@ -225,6 +268,8 @@ export class Viewer {
     if (!inspecting) this.setSection([])
     this.material.color.setScalar(inspecting ? 0.2 : 1)
     this.material.clippingPlanes = inspecting ? [this.clippingPlane] : []
+    this.blastHoleLines.material.clippingPlanes = this.material.clippingPlanes
+    this.blastHoleCollars.material.clippingPlanes = this.material.clippingPlanes
     this.sidebarWidth = sidebarWidth
     this.resize()
 
@@ -270,11 +315,12 @@ export class Viewer {
     this.movementLine.visible = false
     if (blocks.length) {
       const post = blocks.map((block) => this.postById.get(block.id)!)
-      this.movement = new SectionMovement(blocks, post, this.origin)
+      this.movement = new SectionMovement(blocks, post, this.origin, this.mode === 'inspect')
       this.scene.add(this.movement)
     }
     this.setMovementProgress(!blocks.length && this.mode !== 'inspect' ? 0 : this.movementProgress)
     const focused = this.movement !== null || this.mode === 'inspect'
+    this.mesh.visible = this.mode !== 'model' || blocks !== this.models.pre || this.movement === null
     this.material.transparent = focused
     this.material.opacity = focused ? 0.01 : 1
     this.material.depthWrite = !focused
@@ -440,6 +486,10 @@ export class Viewer {
       boundary.geometry.dispose()
       boundary.material.dispose()
     }
+    this.blastHoleLines.geometry.dispose()
+    this.blastHoleCollars.geometry.dispose()
+    this.blastHoleLines.material.dispose()
+    this.blastHoleCollars.material.dispose()
     this.hoverHighlight.dispose()
     this.selectionHighlight.dispose()
     this.originalPositionHighlight.dispose()

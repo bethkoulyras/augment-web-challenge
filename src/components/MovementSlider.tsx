@@ -8,9 +8,11 @@ interface MovementSliderProps {
   onChange: (progress: number) => void
   showConnections: boolean
   onConnectionsChange?: (show: boolean) => void
+  showBlastHoles: boolean
+  onBlastHolesChange?: (show: boolean) => void
 }
 
-export default function MovementSlider({ getMovementBlocks, movementCount, disabled, onChange, showConnections, onConnectionsChange }: MovementSliderProps) {
+export default function MovementSlider({ getMovementBlocks, movementCount, disabled, onChange, showConnections, onConnectionsChange, showBlastHoles, onBlastHolesChange }: MovementSliderProps) {
   const [progress, setProgress] = useState(0)
   const [playing, setPlaying] = useState(false)
   const progressRef = useRef(0)
@@ -67,6 +69,7 @@ export default function MovementSlider({ getMovementBlocks, movementCount, disab
             step={0.01}
             value={progress}
             disabled={disabled}
+            aria-label="Movement progress"
             aria-valuetext={Math.round(progress * 100) + '%'}
             onChange={(event) => {
               pause()
@@ -80,10 +83,14 @@ export default function MovementSlider({ getMovementBlocks, movementCount, disab
           </div>
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-3 text-neutral-500">
-        <span className="flex items-center gap-2"><span aria-hidden="true" className="w-4 border-t border-neutral-500" />
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-neutral-500">
+        <span className="mr-auto flex items-center gap-2"><span aria-hidden="true" className="w-4 border-t border-neutral-500" />
           Blast Boundary
         </span>
+        <label className="flex w-fit cursor-pointer items-center gap-2 text-neutral-400 has-disabled:cursor-default has-disabled:opacity-50" title={onBlastHolesChange ? undefined : 'Blast hole data unavailable'}>
+          <input type="checkbox" checked={showBlastHoles} disabled={!onBlastHolesChange} onChange={(event) => onBlastHolesChange?.(event.currentTarget.checked)} className="accent-amber-400" />
+          Blast holes
+        </label>
         {onConnectionsChange && (
           <label className="flex w-fit cursor-pointer items-center gap-2 text-neutral-400">
             <input type="checkbox" checked={showConnections} onChange={(event) => onConnectionsChange(event.currentTarget.checked)} className="cursor-pointer accent-neutral-300" />

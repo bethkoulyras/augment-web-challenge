@@ -17,6 +17,7 @@ export class SectionMovement extends InstancedMesh<BoxGeometry, MeshLambertMater
     public readonly pre: readonly Block[],
     public readonly post: readonly Block[],
     private readonly origin: Vector3,
+    includeConnections: boolean,
   ) {
     super(new BoxGeometry(1, 1, 1), new MeshLambertMaterial(), pre.length)
     this.instanceMatrix.setUsage(DynamicDrawUsage)
@@ -42,19 +43,23 @@ export class SectionMovement extends InstancedMesh<BoxGeometry, MeshLambertMater
         Math.max(start.z, end.z) - origin.z + halfHeight,
         origin.y - Math.min(start.y, end.y) + halfDepth,
       ))
-      if (start.movementDistance > 0) {
-        positions.push(
-          start.x - origin.x, start.z - origin.z, origin.y - start.y,
-          end.x - origin.x, end.z - origin.z, origin.y - end.y,
-        )
+      if (includeConnections) {
+        if (start.movementDistance > 0) {
+          positions.push(
+            start.x - origin.x, start.z - origin.z, origin.y - start.y,
+            end.x - origin.x, end.z - origin.z, origin.y - end.y,
+          )
+        }
+        this.connectionCounts.push(positions.length / 6)
       }
-      this.connectionCounts.push(positions.length / 6)
     })
     this.boundingBox = bounds
     this.boundingSphere = bounds.getBoundingSphere(new Sphere())
-    this.connections.geometry.setPositions(positions)
-    this.connections.renderOrder = 3
-    this.add(this.connections)
+    if (includeConnections) {
+      this.connections.geometry.setPositions(positions)
+      this.connections.renderOrder = 3
+      this.add(this.connections)
+    }
   }
 
   public setCount(count: number): void {

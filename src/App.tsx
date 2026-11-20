@@ -11,6 +11,8 @@ import { csvFiles } from './data/csvFiles'
 import { categoryFields, createBlockModels } from './data/blockModels'
 import { createBlastBoundarySegments } from './data/blastBoundary'
 import type { BlastBoundaries } from './data/blastBoundary'
+import { createBlastHoles } from './data/blastHoles'
+import type { BlastHole } from './data/blastHoles'
 import type { Block, BlockModels, CategorySelection, ColourField } from './data/blockModels'
 import type { ViewerMode } from './viewer/Viewer'
 import { loadCsv } from './utils/loadCsv'
@@ -20,6 +22,7 @@ const emptyBlocks: readonly Block[] = []
 export default function App() {
   const [models, setModels] = useState<BlockModels | null>(null)
   const [blastBoundaries, setBlastBoundaries] = useState<BlastBoundaries>({ pre: [], post: [] })
+  const [blastHoles, setBlastHoles] = useState<BlastHole[]>([])
   const [loadedCount, setLoadedCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null)
@@ -42,7 +45,7 @@ export default function App() {
     ? orderedBlocks.filter((block) => block.attributes[categorySelection.field] === categorySelection.value)
     : null, [orderedBlocks, categorySelection])
 
-  const modelBlocks = categoryBlocks ?? minimumFilter?.blocks ?? null
+  const modelBlocks = categoryBlocks ?? orderedBlocks
   const modelCount = categoryBlocks?.length ?? visibleCount
 
   const sectionBlocks = useMemo(() => {
@@ -84,6 +87,12 @@ export default function App() {
       if (!controller.signal.aborted) {
         setError(error instanceof Error ? error.message : 'Could not load the CSV.')
       }
+    })
+
+    loadCsv('/1_blastholes.csv', controller.signal).then((rows) => {
+      if (!controller.signal.aborted) setBlastHoles(createBlastHoles(rows))
+    }).catch(() => {
+      if (!controller.signal.aborted) setBlastHoles([])
     })
 
     return () => controller.abort()
@@ -130,7 +139,7 @@ export default function App() {
     <main className="relative h-full w-full">
       {!isLoading && models && colourScale && (
         <>
-          <SceneViewer models={models} blastBoundaries={blastBoundaries} colourScale={colourScale} mode={mode} slicePosition={slicePosition} getVisibleBlocks={getVisibleBlocks} getMovementBlocks={getMovementBlocks} visibleCount={visibleCount} movementCount={movementCount} categorySelection={categorySelection} selectedBlock={selectedBlock} onSelectBlock={setSelectedBlock} onSliceChange={setSlicePosition} />
+          <SceneViewer models={models} blastBoundaries={blastBoundaries} blastHoles={blastHoles} colourScale={colourScale} mode={mode} slicePosition={slicePosition} getVisibleBlocks={getVisibleBlocks} getMovementBlocks={getMovementBlocks} visibleCount={visibleCount} movementCount={movementCount} categorySelection={categorySelection} selectedBlock={selectedBlock} onSelectBlock={setSelectedBlock} onSliceChange={setSlicePosition} />
           <div className="absolute top-20 left-6 z-10 flex w-80 max-h-[calc(100%_-_12rem)] max-w-[calc(100%_-_3rem)] flex-col gap-3 overflow-y-auto sm:top-6 sm:max-h-[calc(100%_-_8rem)]">
             <ColourPalette scale={colourScale} onChange={changeColourField} collapsed={paletteCollapsed} onToggle={() => setPaletteCollapsed((current) => !current)} minimum={minimum} categoryCode={categorySelection?.value ?? null} onCategoryCodeChange={changeCategoryCode}>
               {colourScale.kind !== 'category' && <MinimumFilterControls scale={colourScale} minimum={minimum} onChange={changeMinimum} />}
